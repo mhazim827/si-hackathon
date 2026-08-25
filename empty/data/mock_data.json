@@ -1,0 +1,21 @@
+{
+  "student": {
+    "id": 1,
+    "name": "Shahnawaj",
+    "skills": ["Python", "SQL", "Communication"]
+  },
+  "opportunities": [
+    {
+      "id": 101,
+      "title": "Python Intern",
+      "required_skills": ["Python", "SQL", "Flask"],
+      "preferred_skills": ["Git", "Pandas"]
+    },
+    {
+      "id": 102,
+      "title": "Data Intern",
+      "required_skills": ["Python", "Pandas", "SQL"],
+      "preferred_skills": ["Excel"]
+    }
+  ]
+}
