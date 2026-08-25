@@ -1,1 +1,1 @@
-# si-hackathon
+# sih-hackathon
