@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skill Assessment | SkillBridge</title>
+</head>
+
+<body>
+    <header>
+        <nav>
+            <a href="{{ url_for('index') }}">SkillBridge</a>
+
+            <a href="{{ url_for('index') }}">
+                Home
+            </a>
+        </nav>
+    </header>
+
+    <main>
+        <section>
+            <p>Career readiness assessment</p>
+
+            <h1>
+                Discover your strengths and skill gaps
+            </h1>
+
+            <p>
+                Answer the questions honestly to help us understand your current
+                skills and recommend suitable learning and career opportunities.
+            </p>
+        </section>
+
+        <section id="assessment">
+            <p>
+                Question <span id="current-question">1</span>
+                of <span id="total-questions">10</span>
+            </p>
+
+            <progress
+                id="assessment-progress"
+                value="1"
+                max="10">
+            </progress>
+
+            <form id="assessment-form">
+                <fieldset>
+                    <legend>
+                        How comfortable are you with solving problems using programming?
+                    </legend>
+
+                    <label>
+                        <input type="radio" name="programming-skill" value="beginner">
+                        Beginner
+                    </label>
+
+                    <label>
+                        <input type="radio" name="programming-skill" value="basic">
+                        Basic
+                    </label>
+
+                    <label>
+                        <input type="radio" name="programming-skill" value="intermediate">
+                        Intermediate
+                    </label>
+
+                    <label>
+                        <input type="radio" name="programming-skill" value="advanced">
+                        Advanced
+                    </label>
+
+                    <label>
+                        <input type="radio" name="programming-skill" value="expert">
+                        Expert
+                    </label>
+                </fieldset>
+
+                <button type="button" id="previous-button">
+                    Previous
+                </button>
+
+                <button type="button" id="next-button">
+                    Next
+                </button>
+
+                <button type="submit" id="submit-button">
+                    Submit Assessment
+                </button>
+            </form>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/integration.js') }}"></script>
+</body>
+</html>
