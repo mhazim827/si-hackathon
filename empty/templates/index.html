@@ -4,20 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SkillBridge | Academia-Industry Collaboration</title>
-
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 
 <body>
     <header>
         <nav>
-            <!-- Points to home() route in app.py -->
-            <a href="http://127.0.0.1:5000">SkillBridge</a>
+            <a href="{{ url_for('index') }}">SkillBridge</a>
 
             <div>
                 <a href="#features">Features</a>
                 <a href="#how-it-works">How It Works</a>
-                <a href="http://127.0.0.1:5000/assessment">Assessment</a>
+                <a href="{{ url_for('assessment') }}">Assessment</a>
             </div>
         </nav>
     </header>
@@ -35,21 +32,13 @@
                 for skill mapping, internships, training, and placements.
             </p>
 
-            <a href="http://127.0.0.1:5000/assessment">
+            <a href="{{ url_for('assessment') }}">
                 Take Skill Assessment
             </a>
 
-            <a href="#recommendations">
-                View My Matches
+            <a href="#features">
+                Explore Platform
             </a>
-        </section>
-
-        <!-- Container for integration.js to render job cards from /api/opportunities -->
-        <section id="recommendations">
-            <h2>Recommended Opportunities for You</h2>
-            <div id="opportunities-container">
-                <p>Loading matched opportunities...</p>
-            </div>
         </section>
 
         <section id="features">
@@ -134,7 +123,6 @@
         </p>
     </footer>
 
-    <!-- Points to static/js/integration.js matching your file structure -->
     <script src="{{ url_for('static', filename='js/integration.js') }}"></script>
 </body>
 </html>
