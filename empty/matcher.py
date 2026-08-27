@@ -1,10 +1,7 @@
 import json
+from pathlib import Path
 
 def match_student_to_opportunity(student, opportunity):
-    """
-    Compares one student profile dictionary with one opportunity dictionary.
-    Safely handles missing keys, null values, and casing differences.
-    """
     student_skills = {
         skill.strip().lower() 
         for skill in (student.get("skills") or [])
@@ -22,13 +19,13 @@ def match_student_to_opportunity(student, opportunity):
     missing_skills = sorted(required_skills - student_skills)
     matched_preferred = sorted(student_skills & preferred_skills)
 
-    # 1. Calculate Required Score (80% total weight)
+    # Required Skills (80% Weight)
     if required_skills:
         required_score = (len(matched_required) / len(required_skills)) * 80
     else:
         required_score = 80.0
 
-    # 2. Calculate Preferred Score (20% total weight)
+    # Preferred Skills (20% Weight)
     if preferred_skills:
         preferred_score = (len(matched_preferred) / len(preferred_skills)) * 20
     else:
@@ -36,7 +33,7 @@ def match_student_to_opportunity(student, opportunity):
 
     match_score = round(required_score + preferred_score, 2)
 
-    # 3. Determine Status Badge Label
+    # Status Label
     if match_score >= 75:
         status = "Strong Match"
     elif match_score >= 50:
@@ -55,23 +52,29 @@ def match_student_to_opportunity(student, opportunity):
         "missing_skills": missing_skills
     }
 
-
 def get_recommendations(student, opportunities):
-    """Sorts and returns all opportunities by highest match score."""
     if not opportunities:
         return []
-        
     results = [
         match_student_to_opportunity(student, opp) 
         for opp in opportunities
     ]
     return sorted(results, key=lambda item: item["match_score"], reverse=True)
 
-
-# Local Standalone Testing (Simple 3-line path)
+# Standalone execution test matching your tree layout
 if __name__ == '__main__':
-    with open("data/mock_data.json", "r") as file:
-        data = json.load(file)
+    BASE_DIR = Path(__file__).resolve().parent
+    MOCK_DATA_PATH = BASE_DIR / "empty" / "data" / "mock_data.json"
+    
+    try:
+        with open(MOCK_DATA_PATH, "r") as file:
+            data = json.load(file)
 
-    recommendations = get_recommendations(data["student"], data["opportunities"])
-    print(json.dumps(recommendations, indent=2))
+        student = data.get("student", {})
+        opportunities = data.get("opportunities", [])
+        
+        recommendations = get_recommendations(student, opportunities)
+        print(f"--- Loaded successfully from {MOCK_DATA_PATH} ---")
+        print(json.dumps(recommendations, indent=2))
+    except FileNotFoundError:
+        print(f"Error: Unable to locate mock_data.json at {MOCK_DATA_PATH}")
