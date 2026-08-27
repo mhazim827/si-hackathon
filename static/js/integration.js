@@ -3,14 +3,19 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 /**
- * Fetches ranked internship opportunities from the Flask API endpoint
- * and updates the DOM dynamically.
+ * Fetches ranked internship/opportunity recommendations for the logged-in
+ * student from the Flask API endpoint and updates the DOM dynamically.
  */
 function fetchOpportunities() {
     const container = document.getElementById("opportunities-container");
+    if (!container) return;
 
     fetch("/api/opportunities")
         .then(response => {
+            if (response.status === 401) {
+                window.location.href = "/login";
+                throw new Error("redirecting to login");
+            }
             if (!response.ok) {
                 throw new Error(`HTTP Status Code: ${response.status}`);
             }
@@ -24,6 +29,7 @@ function fetchOpportunities() {
             }
         })
         .catch(error => {
+            if (error.message === "redirecting to login") return;
             console.error("Fetch Error:", error);
             container.innerHTML = `
                 <div style="color: #721c24; background-color: #f8d7da; padding: 15px; border-radius: 6px; width: 100%;">
@@ -81,7 +87,7 @@ function renderCards(opportunities, container) {
             </div>
 
             <div class="card-footer" style="margin-top: 15px;">
-                <button class="btn-apply" onclick="applyOpportunity(${opp.opportunity_id})">Apply Now</button>
+                <button class="btn-apply" onclick="applyOpportunity(${opp.opportunity_id}, this)">Apply Now</button>
             </div>
         `;
 
@@ -103,8 +109,19 @@ function escapeHtml(str) {
 }
 
 /**
- * Triggered when a user clicks 'Apply Now'.
+ * Triggered when a user clicks 'Apply Now' — records the application
+ * against the logged-in student in the database.
  */
-function applyOpportunity(opportunityId) {
-    alert(`Application successfully registered for Opportunity ID: ${opportunityId}`);
+function applyOpportunity(opportunityId, buttonEl) {
+    fetch(`/api/apply/${opportunityId}`, { method: "POST" })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === "success") {
+                buttonEl.textContent = "Applied ✓";
+                buttonEl.disabled = true;
+            } else {
+                alert("Could not record application: " + data.message);
+            }
+        })
+        .catch(err => console.error("Apply error:", err));
 }

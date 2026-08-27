@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log In | SkillBridge</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header>
+        <nav>
+            <a href="{{ url_for('login_page') }}">SkillBridge</a>
+        </nav>
+    </header>
+
+    <main>
+        <section id="auth-card">
+            <p class="subtitle">Welcome back</p>
+            <h1>Log in to your account</h1>
+
+            <form id="login-form">
+                <div class="input-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" placeholder="e.g. student101" required autofocus>
+                </div>
+                <div class="input-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" placeholder="Your password" required>
+                </div>
+                <p id="auth-error" class="auth-error" style="display:none;"></p>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary" style="width:100%;">Log In</button>
+                </div>
+            </form>
+
+            <p class="auth-switch">
+                New here? <a href="{{ url_for('register_page') }}">Create an account</a>
+            </p>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/login.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skill Assessment | SkillBridge</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+    <header>
+        <nav>
+            <a href="{{ url_for('home') }}">SkillBridge</a>
+            <div>
+                <a href="{{ url_for('home') }}">Home</a>
+                <a href="{{ url_for('logout') }}">Log Out</a>
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        <section id="assessment-intro">
+            <p class="subtitle">Career readiness assessment</p>
+            <h1>Discover your strengths and skill gaps</h1>
+            <p>
+                Check every skill that applies to you across any domain — programming,
+                lab science, design, business, whatever fits. Don't see a skill listed?
+                Add it yourself at the bottom. This builds the profile we match you
+                against internships and opportunities with.
+            </p>
+        </section>
+
+        <section id="assessment">
+            <div class="progress-info">
+                Question <span id="current-question">1</span> of <span id="total-questions">-</span>
+            </div>
+            <progress id="assessment-progress" value="0" max="1"></progress>
+
+            <form id="assessment-form">
+                <div id="question-steps"><p>Loading questions...</p></div>
+
+                <div class="form-actions">
+                    <button type="button" id="previous-button" class="btn btn-secondary" disabled>Previous</button>
+                    <button type="button" id="next-button" class="btn btn-primary">Next</button>
+                    <button type="submit" id="submit-button" class="btn btn-success" style="display: none;">Submit Assessment</button>
+                </div>
+            </form>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/assessment.js') }}"></script>
+</body>
+</html>

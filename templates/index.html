@@ -11,13 +11,14 @@
 <body>
     <header>
         <nav>
-            <!-- Points to home() route in app.py -->
-            <a href="http://127.0.0.1:5000">SkillBridge</a>
+            <a href="{{ url_for('home') }}">SkillBridge</a>
 
             <div>
                 <a href="#features">Features</a>
                 <a href="#how-it-works">How It Works</a>
-                <a href="http://127.0.0.1:5000/assessment">Assessment</a>
+                <a href="{{ url_for('assessment') }}">Assessment</a>
+                <span class="nav-user">Hi, {{ student_name }}</span>
+                <a href="{{ url_for('logout') }}">Log Out</a>
             </div>
         </nav>
     </header>
@@ -32,10 +33,11 @@
 
             <p>
                 A unified platform connecting students, academicians, and industries
-                for skill mapping, internships, training, and placements.
+                for skill mapping, internships, training, and placements —
+                across any field, not just tech.
             </p>
 
-            <a href="http://127.0.0.1:5000/assessment">
+            <a href="{{ url_for('assessment') }}">
                 Take Skill Assessment
             </a>
 
@@ -59,7 +61,7 @@
                 <h3>Skill Assessment</h3>
                 <p>
                     Evaluate your technical and soft skills through
-                    industry-relevant questions.
+                    industry-relevant questions across any domain.
                 </p>
             </article>
 
@@ -92,7 +94,7 @@
             <h2>How it works</h2>
 
             <ol>
-                <li>Create your profile.</li>
+                <li>Create your account and log in.</li>
                 <li>Complete the skill assessment.</li>
                 <li>Discover your skill gaps and recommended opportunities.</li>
                 <li>Apply, learn, and track your progress.</li>
@@ -134,7 +136,6 @@
         </p>
     </footer>
 
-    <!-- Points to static/js/integration.js matching your file structure -->
     <script src="{{ url_for('static', filename='js/integration.js') }}"></script>
 </body>
 </html>

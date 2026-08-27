@@ -1,17 +1,24 @@
 import json
 from pathlib import Path
 
+# NOTE: This matching logic is intentionally skill-agnostic. It never checks
+# what a skill "is" — it just intersects sets of strings. That means it works
+# identically whether the skills involved are "python"/"sql", or
+# "microscopy"/"titration", or "graphic-design"/"figma". Any domain works as
+# long as the student's skill list and the opportunity's required/preferred
+# skill lists use comparable skill names.
+
 def match_student_to_opportunity(student, opportunity):
     student_skills = {
-        skill.strip().lower() 
+        skill.strip().lower()
         for skill in (student.get("skills") or [])
     }
     required_skills = {
-        skill.strip().lower() 
+        skill.strip().lower()
         for skill in (opportunity.get("required_skills") or [])
     }
     preferred_skills = {
-        skill.strip().lower() 
+        skill.strip().lower()
         for skill in (opportunity.get("preferred_skills") or [])
     }
 
@@ -56,23 +63,25 @@ def get_recommendations(student, opportunities):
     if not opportunities:
         return []
     results = [
-        match_student_to_opportunity(student, opp) 
+        match_student_to_opportunity(student, opp)
         for opp in opportunities
     ]
     return sorted(results, key=lambda item: item["match_score"], reverse=True)
 
-# Standalone execution test matching your tree layout
+# Standalone execution test — reads the legacy JSON fixture directly (useful
+# for quick sanity checks without spinning up Flask/SQLite).
 if __name__ == '__main__':
     BASE_DIR = Path(__file__).resolve().parent
-    MOCK_DATA_PATH = BASE_DIR / "empty" / "data" / "mock_data.json"
-    
+    MOCK_DATA_PATH = BASE_DIR / "data" / "mock_data.json"
+
     try:
         with open(MOCK_DATA_PATH, "r") as file:
             data = json.load(file)
 
-        student = data.get("student", {})
+        students = data.get("students") or [data.get("student", {})]
+        student = students[0]
         opportunities = data.get("opportunities", [])
-        
+
         recommendations = get_recommendations(student, opportunities)
         print(f"--- Loaded successfully from {MOCK_DATA_PATH} ---")
         print(json.dumps(recommendations, indent=2))

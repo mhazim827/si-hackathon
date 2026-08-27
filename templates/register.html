@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Account | SkillBridge</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header>
+        <nav>
+            <a href="{{ url_for('login_page') }}">SkillBridge</a>
+        </nav>
+    </header>
+
+    <main>
+        <section id="auth-card">
+            <p class="subtitle">Get started</p>
+            <h1>Create your student account</h1>
+
+            <form id="register-form">
+                <div class="input-group">
+                    <label for="name">Full Name</label>
+                    <input type="text" id="name" name="name" placeholder="e.g. Hazim Khan" required autofocus>
+                </div>
+                <div class="input-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" placeholder="letters, numbers, underscore" required>
+                </div>
+                <div class="input-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" placeholder="At least 6 characters" required>
+                </div>
+                <p id="auth-error" class="auth-error" style="display:none;"></p>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary" style="width:100%;">Create Account</button>
+                </div>
+            </form>
+
+            <p class="auth-switch">
+                Already have an account? <a href="{{ url_for('login_page') }}">Log in</a>
+            </p>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/login.js') }}"></script>
+</body>
+</html>
