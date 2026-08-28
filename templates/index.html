@@ -1,141 +1,44 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SkillBridge | Academia-Industry Collaboration</title>
-
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SkillBridge | {{ role|title }} workspace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
+<body class="app-shell role-{{ role }}">
+  <header class="topbar"><nav>
+    <a class="brand" href="{{ url_for('home') }}"><span class="brand-mark">S</span>SkillBridge</a>
+    <div class="nav-links">
+      <a class="active" href="{{ url_for('home') }}">Workspace</a>
+      {% if role == 'student' %}<a href="{{ url_for('assessment') }}">Skill challenge</a>{% endif %}
+      <a href="{{ url_for('profile') }}">My profile</a><a class="avatar" href="{{ url_for('profile') }}" title="Your profile">{{ user['name'][0]|upper }}</a>
+      <a class="logout" href="{{ url_for('logout') }}">Log out</a>
+    </div>
+  </nav></header>
 
-<body>
-    <header>
-        <nav>
-            <a href="{{ url_for('home') }}">SkillBridge</a>
-
-            <div>
-                <a href="#features">Features</a>
-                <a href="#how-it-works">How It Works</a>
-                <a href="{{ url_for('assessment') }}">Assessment</a>
-                <span class="nav-user">Hi, {{ student_name }}</span>
-                <a href="{{ url_for('logout') }}">Log Out</a>
-            </div>
-        </nav>
-    </header>
-
-    <main>
-        <section id="hero">
-            <p>Academia meets industry</p>
-
-            <h1>
-                Build the skills. Find the opportunity. Shape your future.
-            </h1>
-
-            <p>
-                A unified platform connecting students, academicians, and industries
-                for skill mapping, internships, training, and placements —
-                across any field, not just tech.
-            </p>
-
-            <a href="{{ url_for('assessment') }}">
-                Take Skill Assessment
-            </a>
-
-            <a href="#recommendations">
-                View My Matches
-            </a>
-        </section>
-
-        <!-- Container for integration.js to render job cards from /api/opportunities -->
-        <section id="recommendations">
-            <h2>Recommended Opportunities for You</h2>
-            <div id="opportunities-container">
-                <p>Loading matched opportunities...</p>
-            </div>
-        </section>
-
-        <section id="features">
-            <h2>Everything you need to become career-ready</h2>
-
-            <article>
-                <h3>Skill Assessment</h3>
-                <p>
-                    Evaluate your technical and soft skills through
-                    industry-relevant questions across any domain.
-                </p>
-            </article>
-
-            <article>
-                <h3>Skill Mapping</h3>
-                <p>
-                    Identify skill gaps and discover suitable roles,
-                    industries, and learning paths.
-                </p>
-            </article>
-
-            <article>
-                <h3>Internships and Placements</h3>
-                <p>
-                    Find, apply for, and track internships, projects,
-                    and placement opportunities.
-                </p>
-            </article>
-
-            <article>
-                <h3>Industry Learning</h3>
-                <p>
-                    Access workshops, certifications, mentorship programs,
-                    and practical projects.
-                </p>
-            </article>
-        </section>
-
-        <section id="how-it-works">
-            <h2>How it works</h2>
-
-            <ol>
-                <li>Create your account and log in.</li>
-                <li>Complete the skill assessment.</li>
-                <li>Discover your skill gaps and recommended opportunities.</li>
-                <li>Apply, learn, and track your progress.</li>
-            </ol>
-        </section>
-
-        <section>
-            <h2>One platform. Three possibilities.</h2>
-
-            <article>
-                <h3>For Students</h3>
-                <p>
-                    Build a verified portfolio and discover opportunities
-                    matched to your skills.
-                </p>
-            </article>
-
-            <article>
-                <h3>For Academicians</h3>
-                <p>
-                    Monitor student development and connect with industry
-                    programs and collaborations.
-                </p>
-            </article>
-
-            <article>
-                <h3>For Industry</h3>
-                <p>
-                    Find skilled candidates and publish internships,
-                    training, projects, and jobs.
-                </p>
-            </article>
-        </section>
-    </main>
-
-    <footer>
-        <p>
-            &copy; 2026 SkillBridge. Academia and industry, working together.
-        </p>
-    </footer>
-
-    <script src="{{ url_for('static', filename='js/integration.js') }}"></script>
-</body>
-</html>
+  <main class="dashboard">
+    {% if role == 'student' %}
+    <section class="welcome-panel reveal"><div><p class="eyebrow">Student command centre</p><h1>Hi {{ user['name'].split(' ')[0] }}, build momentum.</h1><p>Your profile is your launchpad: prove what you can do, close real skill gaps, and follow every application from first click to offer.</p><div class="button-row"><a class="btn primary" href="{{ url_for('assessment') }}">Take the skill challenge <span>→</span></a><a class="btn ghost" href="#matches">Explore matches</a></div></div><div class="orbital-card"><span class="tiny-label">Career readiness</span><strong>{{ stats.skills * 12 + 28 }}%</strong><div class="meter"><i style="width: {{ [stats.skills * 12 + 28, 100]|min }}%"></i></div><span>{{ stats.skills }} skills verified in your profile</span></div></section>
+    <section class="metrics reveal"><article><span>✦</span><div><b>{{ stats.skills }}</b><small>Skills assessed</small></div></article><article><span>↗</span><div><b>{{ stats.applications }}</b><small>Active applications</small></div></article><article><span>▣</span><div><b>{{ stats.portfolio }}</b><small>Portfolio proof points</small></div></article></section>
+    <section id="matches" class="section-head reveal"><div><p class="eyebrow">Matched for you</p><h2>Opportunities worth your time</h2><p>Each match balances the skills you have today with the skills that will unlock your next step.</p></div><a href="{{ url_for('profile') }}" class="text-link">Track applications →</a></section>
+    <section id="opportunities-container" class="opportunity-grid" aria-live="polite"><div class="loading-card">Finding your best-fit opportunities…</div></section>
+    <section class="how-panel reveal" id="how-it-works"><div><p class="eyebrow">How SkillBridge works</p><h2>From potential to proof, in one connected journey.</h2></div><ol><li><span>01</span><div><b>Show what you know</b><p>Select your skills, then solve scenario-based challenges. We turn your performance into a clear Beginner, Intermediate, or Expert readiness signal.</p></div></li><li><span>02</span><div><b>See a route that fits</b><p>Roles are ranked against your profile, so you can distinguish a strong fit from a useful growth opportunity before applying.</p></div></li><li><span>03</span><div><b>Make progress visible</b><p>Store projects and certificates, apply once, and watch every recruiter update land in one simple timeline.</p></div></li></ol></section>
+    {% elif role == 'industry' %}
+    <section class="welcome-panel industry-hero reveal"><div><p class="eyebrow">Industry talent workspace</p><h1>Turn hiring intent into the right conversations.</h1><p>Publish a role in minutes, receive matched applications, and move candidates through a clear, shared recruitment pipeline.</p><button class="btn primary" data-open-post>Post a new opportunity <span>+</span></button></div><div class="hero-chip-stack"><div>🎯 <b>Skill-first shortlisting</b><small>See candidates beyond their résumé</small></div><div>⚡ <b>Live application alerts</b><small>Never miss a strong applicant</small></div></div></section>
+    <section class="metrics reveal"><article><span>▣</span><div><b>{{ stats.opportunities }}</b><small>Live opportunities</small></div></article><article><span>↗</span><div><b>{{ stats.applications }}</b><small>Candidate applications</small></div></article><article><span>✦</span><div><b>{{ stats.shortlisted }}</b><small>In your pipeline</small></div></article></section>
+    <section class="section-head reveal"><div><p class="eyebrow">Recruitment pulse</p><h2>Applicants and next actions</h2><p>Review skills at a glance, then give every applicant a visible, timely update.</p></div><button class="btn ghost" data-open-post>+ Post opportunity</button></section>
+    <section id="industry-applications" class="application-board"><div class="loading-card">Loading your candidate pipeline…</div></section>
+    <section class="two-column reveal"><article class="surface"><p class="eyebrow">Your live opportunities</p><div id="my-opportunities"><p class="muted">Loading your postings…</p></div></article><article class="surface"><p class="eyebrow">Notifications</p><div id="notifications"><p class="muted">No notifications yet. New applications will appear here.</p></div></article></section>
+    <dialog id="post-dialog"><form id="post-form" method="dialog"><button type="button" class="dialog-close" data-close-post>×</button><p class="eyebrow">New opportunity</p><h2>Invite the right talent in.</h2><p class="muted">Describe the work clearly; SkillBridge will match it to student capability.</p><div class="form-grid"><label>Role title<input name="title" required placeholder="e.g. Product Design Intern"></label><label>Opportunity type<select name="type"><option>Internship</option><option>Full-Time</option><option>Apprenticeship</option><option>Research</option><option>Training</option></select></label><label>Location<input name="location" required placeholder="e.g. Chennai / Hybrid"></label><label>Duration<input name="duration" required placeholder="e.g. 3 months"></label></div><label>Description<textarea name="description" required placeholder="What will this person learn, contribute, and own?"></textarea></label><label>Required skills <small>Comma-separated</small><input name="required_skills" required placeholder="figma, user research, communication"></label><label>Preferred skills <small>Comma-separated</small><input name="preferred_skills" placeholder="html, css"></label><p class="form-message" id="post-message"></p><button class="btn primary" type="submit">Publish opportunity →</button></form></dialog>
+    {% else %}
+    <section class="welcome-panel reveal"><div><p class="eyebrow">Academic collaboration hub</p><h1>Connect learning with the world of work.</h1><p>Use this shared view to identify demand trends, guide learners into industry exposure, and surface collaboration opportunities for your faculty.</p><a class="btn primary" href="{{ url_for('profile') }}">Explore collaboration hub →</a></div><div class="orbital-card"><span class="tiny-label">Institution network</span><strong>{{ stats.industry_partners }}</strong><span>industry partners available to connect</span></div></section>
+    <section class="metrics reveal"><article><span>◉</span><div><b>{{ stats.students }}</b><small>Student profiles</small></div></article><article><span>▣</span><div><b>{{ stats.opportunities }}</b><small>Industry opportunities</small></div></article><article><span>✦</span><div><b>{{ stats.industry_partners }}</b><small>Active industry partners</small></div></article></section>
+    <section class="section-head reveal"><div><p class="eyebrow">Collaboration pathways</p><h2>Bring current practice back to campus.</h2><p>Explore faculty internships, FDPs, live projects, guest sessions, mentorship, and research collaboration in a single place.</p></div></section>
+    <section class="pathway-grid"><article><span>01</span><h3>Faculty immersion</h3><p>Find industrial training and FDP opportunities that help your teaching stay aligned with emerging practice.</p></article><article><span>02</span><h3>Live learning</h3><p>Co-design challenges, workshops, and mentor sessions where students work on meaningful industry briefs.</p></article><article><span>03</span><h3>Evidence-led guidance</h3><p>Use skill and opportunity trends to guide curriculum conversations and student career planning.</p></article></section>
+    {% endif %}
+  </main>
+  <footer>SkillBridge <span>·</span> where learning becomes opportunity.</footer>
+  <script src="{{ url_for('static', filename='js/integration.js') }}"></script>
+</body></html>

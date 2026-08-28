@@ -1,0 +1,36 @@
+{
+  "student": {
+    "id": 1,
+    "name": "Shahnawaj",
+    "skills": ["Python", "SQL", "Communication"]
+  },
+  "opportunities": [
+    {
+      "id": 101,
+      "title": "Python Intern",
+      "company": "Ayush Ministry",
+      "location": "Remote",
+      "type": "Internship",
+      "required_skills": ["Python", "SQL", "Flask"],
+      "preferred_skills": ["Git", "Pandas"]
+    },
+    {
+      "id": 102,
+      "title": "Data Intern",
+      "company": "DataCorp",
+      "location": "Delhi",
+      "type": "Internship",
+      "required_skills": ["Python", "Pandas", "SQL"],
+      "preferred_skills": ["Excel"]
+    },
+    {
+      "id": 103,
+      "title": "Frontend Developer",
+      "company": "DesignStudio",
+      "location": "Remote",
+      "type": "Full-Time",
+      "required_skills": ["HTML", "CSS", "React"],
+      "preferred_skills": ["Figma"]
+    }
+  ]
+}

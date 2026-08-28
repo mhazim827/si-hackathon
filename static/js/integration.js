@@ -1,127 +1,64 @@
+const esc = value => String(value || "").replace(/[&<>'"]/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#039;",'"':"&quot;"}[char]));
+const api = (url, options = {}) => fetch(url, options).then(async r => { const body = await r.json(); if (!r.ok) throw new Error(body.message || "Something went wrong."); return body; });
+
 document.addEventListener("DOMContentLoaded", () => {
-    fetchOpportunities();
+  if (document.getElementById("opportunities-container")) loadMatches();
+  if (document.getElementById("industry-applications")) loadIndustryProfile();
+  if (document.getElementById("profile-content")) loadProfile();
+  wireIndustryPost(); wireDialogs();
 });
 
-/**
- * Fetches ranked internship/opportunity recommendations for the logged-in
- * student from the Flask API endpoint and updates the DOM dynamically.
- */
-function fetchOpportunities() {
-    const container = document.getElementById("opportunities-container");
-    if (!container) return;
+function loadMatches() {
+  const container = document.getElementById("opportunities-container");
+  api("/api/opportunities").then(data => {
+    container.innerHTML = data.opportunities.length ? data.opportunities.map(opp => {
+      const applied = opp.application_status;
+      return `<article class="opportunity-card reveal"><div class="card-top"><span class="type-pill">${esc(opp.type)}</span><span class="match ${opp.match_score >= 75 ? "strong" : opp.match_score >= 50 ? "partial" : "gap"}">${opp.match_score}% match</span></div><h3>${esc(opp.title)}</h3><p class="company-name">${esc(opp.company)} · ${esc(opp.location || "Flexible")}</p><p class="card-copy">${esc(opp.description || "A practical opportunity matched to your profile.")}</p><div class="skills-row"><span>Already strong</span><div>${tags(opp.matched_skills, "match-tag", "Building foundation")}</div></div><div class="skills-row"><span>Growth edge</span><div>${tags(opp.missing_skills, "gap-tag", "No major gaps")}</div></div><button class="btn ${applied ? "applied" : "primary"} wide" ${applied ? "disabled" : ""} data-apply="${opp.opportunity_id}">${applied ? `Application: ${esc(applied)}` : "Apply now →"}</button></article>`;
+    }).join("") : `<div class="empty-state"><h3>Your matches will grow with your profile.</h3><p>Complete the skill challenge to unlock personalised opportunity recommendations.</p></div>`;
+    container.querySelectorAll("[data-apply]").forEach(button => button.addEventListener("click", () => apply(button)));
+  }).catch(error => container.innerHTML = `<div class="empty-state"><p>${esc(error.message)}</p></div>`);
+}
+function tags(list, className, fallback) { return list && list.length ? list.map(s => `<i class="${className}">${esc(s)}</i>`).join("") : `<i class="neutral-tag">${fallback}</i>`; }
+function apply(button) { button.disabled = true; button.textContent = "Submitting…"; api(`/api/apply/${button.dataset.apply}`, {method:"POST"}).then(data => { button.textContent = "Application submitted ✓"; button.className = "btn applied wide"; }).catch(error => { button.disabled = false; button.textContent = "Apply now →"; alert(error.message); }); }
 
-    fetch("/api/opportunities")
-        .then(response => {
-            if (response.status === 401) {
-                window.location.href = "/login";
-                throw new Error("redirecting to login");
-            }
-            if (!response.ok) {
-                throw new Error(`HTTP Status Code: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.status === "success" && data.opportunities.length > 0) {
-                renderCards(data.opportunities, container);
-            } else {
-                container.innerHTML = "<p>No matched opportunities found at this time.</p>";
-            }
-        })
-        .catch(error => {
-            if (error.message === "redirecting to login") return;
-            console.error("Fetch Error:", error);
-            container.innerHTML = `
-                <div style="color: #721c24; background-color: #f8d7da; padding: 15px; border-radius: 6px; width: 100%;">
-                    <p><strong>Error loading recommendations:</strong> Unable to connect to backend server.</p>
-                </div>
-            `;
-        });
+function loadIndustryProfile() {
+  api("/api/profile").then(data => {
+    const board = document.getElementById("industry-applications");
+    board.innerHTML = data.applications.length ? data.applications.map(app => `<article class="candidate-row"><div class="candidate-initial">${esc(app.name[0])}</div><div class="candidate-info"><b>${esc(app.name)}</b><span>${esc(app.headline || "Emerging professional")}</span></div><div class="candidate-role"><b>${esc(app.title)}</b><span>${app.skill_count} skills on profile</span></div><select data-status="${app.id}">${["Submitted","Under Review","Shortlisted","Interview","Selected","Not Selected"].map(status => `<option ${status === app.status ? "selected" : ""}>${status}</option>`).join("")}</select></article>`).join("") : `<div class="empty-state"><h3>Your candidate pipeline is ready.</h3><p>Post an opportunity and we’ll surface applicants here as they apply.</p></div>`;
+    board.querySelectorAll("[data-status]").forEach(select => select.addEventListener("change", () => api(`/api/applications/${select.dataset.status}`, {method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify({status:select.value})}).catch(error => alert(error.message))));
+    document.getElementById("my-opportunities").innerHTML = data.opportunities.length ? data.opportunities.map(o => `<div class="mini-row"><div><b>${esc(o.title)}</b><span>${esc(o.type)} · ${esc(o.location)}</span></div><span class="type-pill">Live</span></div>`).join("") : `<p class="muted">You haven’t posted an opportunity yet.</p>`;
+    document.getElementById("notifications").innerHTML = data.notifications.length ? data.notifications.map(n => `<div class="notification"><span>✦</span><p>${esc(n.message)}<small>${esc(n.created_at)}</small></p></div>`).join("") : `<p class="muted">No notifications yet. New applications will appear here.</p>`;
+  }).catch(console.error);
 }
 
-/**
- * Renders individual opportunity cards inside the HTML container element.
- */
-function renderCards(opportunities, container) {
-    container.innerHTML = ""; // Clear existing loading text
-
-    opportunities.forEach(opp => {
-        const card = document.createElement("article");
-        card.className = "opportunity-card";
-
-        // Assign badge color class based on status label
-        let badgeClass = "badge-gap";
-        if (opp.status === "Strong Match") badgeClass = "badge-strong";
-        else if (opp.status === "Partial Match") badgeClass = "badge-partial";
-
-        // Generate tags for matched skills
-        const matchedTags = opp.matched_skills.length > 0
-            ? opp.matched_skills.map(skill => `<span class="tag tag-matched">${escapeHtml(skill)}</span>`).join("")
-            : `<span class="tag tag-none">None</span>`;
-
-        // Generate tags for missing skills
-        const missingTags = opp.missing_skills.length > 0
-            ? opp.missing_skills.map(skill => `<span class="tag tag-missing">${escapeHtml(skill)}</span>`).join("")
-            : `<span class="tag tag-none">None</span>`;
-
-        card.innerHTML = `
-            <div>
-                <div class="card-header">
-                    <div>
-                        <h3>${escapeHtml(opp.title)}</h3>
-                        <p class="company-name">${escapeHtml(opp.company)} • ${escapeHtml(opp.type)}</p>
-                    </div>
-                    <div class="score-badge ${badgeClass}">
-                        <span class="score-number">${opp.match_score}%</span>
-                        <span class="score-label">${escapeHtml(opp.status)}</span>
-                    </div>
-                </div>
-
-                <div class="card-body">
-                    <p style="font-size: 0.85rem; margin-top: 5px;"><strong>Matched Skills:</strong></p>
-                    <div class="tag-container">${matchedTags}</div>
-
-                    <p style="font-size: 0.85rem; margin-top: 5px;"><strong>Skills to Learn:</strong></p>
-                    <div class="tag-container">${missingTags}</div>
-                </div>
-            </div>
-
-            <div class="card-footer" style="margin-top: 15px;">
-                <button class="btn-apply" onclick="applyOpportunity(${opp.opportunity_id}, this)">Apply Now</button>
-            </div>
-        `;
-
-        container.appendChild(card);
-    });
+function wireIndustryPost() {
+  const dialog = document.getElementById("post-dialog"), form = document.getElementById("post-form");
+  document.querySelectorAll("[data-open-post]").forEach(b => b.addEventListener("click", () => dialog?.showModal()));
+  document.querySelectorAll("[data-close-post]").forEach(b => b.addEventListener("click", () => dialog?.close()));
+  if (form) form.addEventListener("submit", event => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const message = document.getElementById("post-message"); api("/api/opportunities", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(data)}).then(result => { message.textContent = result.message; message.className="form-message success"; setTimeout(() => { dialog.close(); form.reset(); loadIndustryProfile(); }, 900); }).catch(error => { message.textContent=error.message; message.className="form-message error"; }); });
 }
 
-/**
- * Escapes HTML characters to safeguard against XSS injections.
- */
-function escapeHtml(str) {
-    if (!str) return "";
-    return String(str)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+function wireDialogs() {
+  document.querySelectorAll("dialog").forEach(dialog => dialog.addEventListener("click", event => { if (event.target === dialog) dialog.close(); }));
 }
 
-/**
- * Triggered when a user clicks 'Apply Now' — records the application
- * against the logged-in student in the database.
- */
-function applyOpportunity(opportunityId, buttonEl) {
-    fetch(`/api/apply/${opportunityId}`, { method: "POST" })
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === "success") {
-                buttonEl.textContent = "Applied ✓";
-                buttonEl.disabled = true;
-            } else {
-                alert("Could not record application: " + data.message);
-            }
-        })
-        .catch(err => console.error("Apply error:", err));
+function loadProfile() {
+  api("/api/profile").then(data => {
+    const u=data.user, role=data.role, content=document.getElementById("profile-content");
+    document.getElementById("profile-name").textContent=u.name; document.getElementById("profile-avatar").textContent=u.name[0].toUpperCase();
+    document.getElementById("profile-headline").textContent=role === "student" ? (u.headline || "Emerging professional") : `${u.organisation || "Independent"} · ${role === "industry" ? "Talent partner" : "Academic collaborator"}`;
+    if (role === "student") content.innerHTML=studentProfile(data); else if(role === "industry") content.innerHTML=industryProfile(data); else content.innerHTML=academicProfile(data);
+    wireProfileActions(data);
+  }).catch(error => document.getElementById("profile-content").innerHTML=`<div class="empty-state">${esc(error.message)}</div>`);
+}
+function studentProfile(data) { return `<div class="profile-grid"><section class="surface profile-about"><p class="eyebrow">About</p><p>${esc(data.user.bio || "Your profile is a living record of your skills, projects, and progress. Add a short introduction to make it yours.")}</p><div class="stat-strip"><span><b>${data.stats.skills}</b> skills</span><span><b>${data.stats.applications}</b> applications</span><span><b>${data.stats.portfolio}</b> proof points</span></div></section><section class="surface"><div class="surface-title"><div><p class="eyebrow">Verified capability</p><h2>Skills & readiness</h2></div><a class="text-link" href="/assessment">Retake challenge →</a></div><div class="skill-levels">${data.skills.length ? data.skills.map(s=>`<div><span>${esc(s.name)}</span><i class="level ${s.level.toLowerCase()}">${esc(s.level)}</i></div>`).join("") : `<p class="muted">Complete the skill challenge to build your verified capability profile.</p>`}</div></section><section class="surface profile-wide"><div class="surface-title"><div><p class="eyebrow">Application timeline</p><h2>Where you stand</h2></div></div><div class="timeline">${data.applications.length ? data.applications.map(a=>`<div class="timeline-row"><i></i><div><b>${esc(a.title)}</b><span>${esc(a.company)} · ${esc(a.location)}</span></div><em class="status status-${a.status.toLowerCase().replaceAll(" ", "-")}">${esc(a.status)}</em></div>`).join("") : `<p class="muted">Applications will appear here after you apply to an opportunity.</p>`}</div></section><section class="surface profile-wide"><div class="surface-title"><div><p class="eyebrow">Digital portfolio</p><h2>Evidence that travels with you</h2></div><button class="btn ghost small" data-add-portfolio>+ Add proof</button></div><div class="portfolio-grid">${data.portfolio.length ? data.portfolio.map(p=>`<article class="portfolio-item"><span class="type-pill">${esc(p.item_type)}</span><h3>${esc(p.title)}</h3><p>${esc(p.description || p.issuer || "Added to your professional profile.")}</p>${p.link ? `<a href="${esc(p.link)}" target="_blank">View item ↗</a>` : ""}</article>`).join("") : `<div class="empty-state compact-empty"><p>Add a project, certificate, internship, or achievement to make your application more credible.</p></div>`}</div></section></div>`; }
+function industryProfile(data) { return `<div class="profile-grid"><section class="surface profile-wide"><p class="eyebrow">Organisation profile</p><h2>${esc(data.user.organisation || data.user.name)}</h2><p class="muted">${esc(data.user.email || "Add a work email to make your partner profile more trusted.")}</p><div class="stat-strip"><span><b>${data.stats.opportunities}</b> live roles</span><span><b>${data.stats.applications}</b> applications</span><span><b>${data.stats.shortlisted}</b> in pipeline</span></div><button class="btn ghost small" id="verify-email">${data.user.verified ? "Email verified ✓" : "Verify work email"}</button></section><section class="surface profile-wide"><p class="eyebrow">Live opportunities</p><div>${data.opportunities.length ? data.opportunities.map(o=>`<div class="mini-row"><div><b>${esc(o.title)}</b><span>${esc(o.type)} · ${esc(o.location)}</span></div><span class="type-pill">Live</span></div>`).join("") : `<p class="muted">Use your workspace to publish your first role.</p>`}</div></section></div>`; }
+function academicProfile(data) { return `<div class="profile-grid"><section class="surface profile-wide"><p class="eyebrow">Academic partner profile</p><h2>${esc(data.user.organisation || data.user.name)}</h2><p class="muted">Connect your faculty and learners to live industry signals, mentorship, applied projects, and learning pathways.</p><div class="stat-strip"><span><b>${data.stats.students}</b> learners visible</span><span><b>${data.stats.opportunities}</b> opportunities</span><span><b>${data.stats.industry_partners}</b> industry partners</span></div><button class="btn ghost small" id="verify-email">${data.user.verified ? "Email verified ✓" : "Verify work email"}</button></section><section class="surface profile-wide"><p class="eyebrow">What to explore next</p><div class="pathway-grid mini"><article><h3>Faculty development</h3><p>Identify practical exposure and industry-led training for your faculty.</p></article><article><h3>Live projects</h3><p>Partner with employers on challenges that create assessable student evidence.</p></article><article><h3>Career conversations</h3><p>Use opportunity signals to focus mentoring and curriculum reflection.</p></article></div></section></div>`; }
+function wireProfileActions(data) {
+  const edit = document.getElementById("edit-profile"), dialog=document.getElementById("edit-dialog"), fields=document.getElementById("profile-form-fields"), form=document.getElementById("profile-form");
+  if(edit) edit.onclick=()=>{ const u=data.user; fields.innerHTML=data.role==="student" ? `<label>Full name<input name="name" value="${esc(u.name)}" required></label><label>Headline<input name="headline" value="${esc(u.headline||"")}" placeholder="e.g. Aspiring data analyst"></label><label>About you<textarea name="bio" placeholder="Share your interests, goals, or the kind of work you enjoy.">${esc(u.bio||"")}</textarea></label>` : `<label>Full name<input name="name" value="${esc(u.name)}" required></label><label>Organisation<input name="organisation" value="${esc(u.organisation||"")}"></label><label>Work email<input name="email" type="email" value="${esc(u.email||"")}"></label>`; dialog.showModal(); };
+  document.querySelectorAll("[data-close-profile]").forEach(b=>b.onclick=()=>dialog.close());
+  if(form) form.onsubmit=e=>{ e.preventDefault(); const message=document.getElementById("profile-message"); api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(new FormData(form)))}).then(()=>{dialog.close();loadProfile();}).catch(error=>{message.textContent=error.message;message.className="form-message error";});};
+  const portfolioDialog=document.getElementById("portfolio-dialog"), add=document.querySelector("[data-add-portfolio]"), portfolioForm=document.getElementById("portfolio-form"); if(add) add.onclick=()=>portfolioDialog.showModal(); document.querySelectorAll("[data-close-portfolio]").forEach(b=>b.onclick=()=>portfolioDialog.close()); if(portfolioForm)portfolioForm.onsubmit=e=>{e.preventDefault();const msg=document.getElementById("portfolio-message");api("/api/portfolio",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(new FormData(portfolioForm)))}).then(()=>{portfolioDialog.close();loadProfile();}).catch(error=>{msg.textContent=error.message;msg.className="form-message error";});};
+  const verify=document.getElementById("verify-email"); if(verify&&!data.user.verified)verify.onclick=()=>api("/api/verify-email",{method:"POST"}).then(()=>loadProfile()).catch(error=>alert(error.message));
 }

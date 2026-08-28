@@ -1,65 +1,7 @@
-document.addEventListener("DOMContentLoaded", () => {
-    const errorEl = document.getElementById("auth-error");
-
-    function showError(message) {
-        errorEl.textContent = message;
-        errorEl.style.display = "block";
-    }
-
-    const loginForm = document.getElementById("login-form");
-    if (loginForm) {
-        loginForm.addEventListener("submit", (e) => {
-            e.preventDefault();
-            errorEl.style.display = "none";
-
-            const payload = {
-                username: document.getElementById("username").value.trim(),
-                password: document.getElementById("password").value,
-            };
-
-            fetch("/api/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            })
-                .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-                .then(({ ok, data }) => {
-                    if (ok && data.status === "success") {
-                        window.location.href = data.redirect || "/";
-                    } else {
-                        showError(data.message || "Login failed.");
-                    }
-                })
-                .catch(() => showError("Could not reach the server. Is it running?"));
-        });
-    }
-
-    const registerForm = document.getElementById("register-form");
-    if (registerForm) {
-        registerForm.addEventListener("submit", (e) => {
-            e.preventDefault();
-            errorEl.style.display = "none";
-
-            const payload = {
-                name: document.getElementById("name").value.trim(),
-                username: document.getElementById("username").value.trim(),
-                password: document.getElementById("password").value,
-            };
-
-            fetch("/api/register", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            })
-                .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-                .then(({ ok, data }) => {
-                    if (ok && data.status === "success") {
-                        window.location.href = data.redirect || "/assessment";
-                    } else {
-                        showError(data.message || "Registration failed.");
-                    }
-                })
-                .catch(() => showError("Could not reach the server. Is it running?"));
-        });
-    }
+document.addEventListener("DOMContentLoaded",()=>{
+ const error=document.getElementById("auth-error"), show=(message)=>{if(error){error.textContent=message;error.className="form-message error";}};
+ const login=document.getElementById("login-form"); if(login)login.addEventListener("submit",event=>{event.preventDefault();fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:document.getElementById("username").value.trim(),password:document.getElementById("password").value})}).then(async r=>({ok:r.ok,data:await r.json()})).then(({ok,data})=>ok?location.href=data.redirect:show(data.message)).catch(()=>show("Couldn’t reach SkillBridge. Please try again."));});
+ const roleFields=document.getElementById("organisation-fields"), register=document.getElementById("register-form"); document.querySelectorAll("input[name=role]").forEach(input=>input.addEventListener("change",()=>roleFields?.classList.toggle("hidden",input.value==="student")));
+ if(register)register.addEventListener("submit",event=>{event.preventDefault();const role=document.querySelector("input[name=role]:checked").value;fetch("/api/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:document.getElementById("name").value.trim(),username:document.getElementById("username").value.trim(),password:document.getElementById("password").value,role,organisation:document.getElementById("organisation")?.value.trim(),email:document.getElementById("email")?.value.trim()})}).then(async r=>({ok:r.ok,data:await r.json()})).then(({ok,data})=>ok?location.href=data.redirect:show(data.message)).catch(()=>show("Couldn’t create the account. Please try again."));});
+ const resetDialog=document.getElementById("reset-dialog"), reset=document.querySelector("[data-reset]"); if(reset)reset.onclick=()=>resetDialog.showModal(); document.querySelectorAll("[data-close-reset]").forEach(button=>button.onclick=()=>resetDialog.close()); const resetForm=document.getElementById("reset-form"); if(resetForm)resetForm.onsubmit=event=>{event.preventDefault();fetch("/api/request-reset",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(new FormData(resetForm)))}).then(r=>r.json()).then(data=>{const message=document.getElementById("reset-message");message.textContent=data.message;message.className="form-message success";});};
 });
