@@ -137,7 +137,10 @@ def request_reset():
 @login_required
 @role_required("industry", "academician")
 def verify_email():
-    conn = db_sqlite_backup.get_connection(); conn.execute("UPDATE accounts SET verified=1 WHERE id=?", (user_id(),)); conn.commit(); conn.close()
+    conn = db_sqlite_backup.get_connection()
+    conn.execute("UPDATE accounts SET verified=%s WHERE id=%s", (True, user_id()))
+    conn.commit()
+    conn.close()
     return jsonify(status="success", message="Email verified for this demo account.")
 
 
