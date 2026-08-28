@@ -1,151 +1,46 @@
 document.addEventListener("DOMContentLoaded", () => {
-    const stepsContainer = document.getElementById("question-steps");
-    const currentQuestionEl = document.getElementById("current-question");
-    const totalQuestionsEl = document.getElementById("total-questions");
-    const progressBar = document.getElementById("assessment-progress");
-    const prevBtn = document.getElementById("previous-button");
-    const nextBtn = document.getElementById("next-button");
-    const submitBtn = document.getElementById("submit-button");
-    const form = document.getElementById("assessment-form");
+  const catalog = document.getElementById("skill-catalog"), start = document.getElementById("start-challenge"), section = document.getElementById("challenge-section"), questionBox = document.getElementById("challenge-questions"), saveSection = document.getElementById("save-section");
+  let skills = [], currentSkill = 0, tier = "beginner", results = {};
 
-    let currentStep = 0;
-    let totalSteps = 0;
-    let existingSkills = [];
-    let categoryNames = [];
+  fetch("/api/skills-catalog").then(response => response.json()).then(data => {
+    catalog.innerHTML = Object.entries(data.categories).map(([category, entries]) => `<fieldset class="skill-group"><legend>${category}</legend><div>${entries.map(skill => `<label class="skill-choice"><input type="checkbox" value="${skill}" ${data.current_skills.includes(skill) ? "checked" : ""}><span>${skill.replaceAll("-", " ")}</span></label>`).join("")}</div></fieldset>`).join("");
+  }).catch(() => catalog.innerHTML = "<p>We couldn’t load the skill catalogue. Please refresh.</p>");
 
-    fetch("/api/skills-catalog")
-        .then((res) => {
-            if (res.status === 401) {
-                window.location.href = "/login";
-                throw new Error("Not logged in");
-            }
-            return res.json();
-        })
-        .then((data) => buildForm(data.categories, data.current_skills || []))
-        .catch((err) => {
-            if (err.message !== "Not logged in") {
-                stepsContainer.innerHTML = "<p>Could not load the assessment. Please refresh.</p>";
-                console.error(err);
-            }
-        });
+  start.addEventListener("click", () => {
+    const selected = [...document.querySelectorAll(".skill-choice input:checked")].map(input => input.value);
+    const custom = document.getElementById("custom-skills").value.split(",").map(value => value.trim().toLowerCase()).filter(Boolean);
+    skills = [...new Set([...selected, ...custom])];
+    const message = document.getElementById("selection-message");
+    if (!skills.length) { message.textContent = "Choose at least one skill to begin."; message.className = "form-message error"; return; }
+    if (skills.length > 3) { message.textContent = "Choose up to three skills for a focused adaptive challenge."; message.className = "form-message error"; return; }
+    start.disabled = true; start.textContent = "Building your path…";
+    fetch("/api/assessment/start", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({skills})}).then(response => response.json().then(data => ({ok:response.ok, data}))).then(({ok,data}) => {
+      if (!ok) throw new Error(data.message); section.classList.remove("hidden"); document.getElementById("skill-selection").classList.add("hidden"); document.getElementById("challenge-eyebrow").textContent = `Skill 1 of ${skills.length}`; loadQuestion(); window.scrollTo({top:0,behavior:"smooth"});
+    }).catch(error => { message.textContent=error.message; message.className="form-message error"; start.disabled=false; start.textContent="Build my adaptive challenge →"; });
+  });
 
-    function buildForm(categories, currentSkills) {
-        existingSkills = currentSkills;
-        categoryNames = Object.keys(categories);
-        totalSteps = categoryNames.length + 1; // +1 for the "other skills" free-text step
-
-        totalQuestionsEl.textContent = totalSteps;
-        progressBar.max = totalSteps;
-
-        stepsContainer.innerHTML = "";
-
-        categoryNames.forEach((category, idx) => {
-            const skills = categories[category];
-            const step = document.createElement("div");
-            step.className = "question-step";
-            step.dataset.question = String(idx);
-            step.style.display = idx === 0 ? "block" : "none";
-
-            const optionsHtml = skills.map((skill) => {
-                const checked = existingSkills.includes(skill) ? "checked" : "";
-                const label = skill.replace(/-/g, " ");
-                return `<label class="radio-option">
-                            <input type="checkbox" name="skills" value="${skill}" ${checked}>
-                            ${label.charAt(0).toUpperCase() + label.slice(1)}
-                        </label>`;
-            }).join("");
-
-            step.innerHTML = `
-                <fieldset>
-                    <legend>${idx + 1}. Which of these ${category} skills do you have? (select all that apply)</legend>
-                    ${optionsHtml}
-                </fieldset>`;
-            stepsContainer.appendChild(step);
-        });
-
-        // Final step: free-text skills not in the catalog
-        const cataloguedSkills = new Set(Object.values(categories).flat());
-        const uncataloguedExisting = existingSkills.filter((s) => !cataloguedSkills.has(s));
-
-        const customStep = document.createElement("div");
-        customStep.className = "question-step";
-        customStep.dataset.question = String(totalSteps - 1);
-        customStep.style.display = "none";
-        customStep.innerHTML = `
-            <fieldset>
-                <legend>${totalSteps}. Any other skills? (any field — sciences, languages, sports, anything)</legend>
-                <div class="input-group">
-                    <label for="custom-skills">Comma-separated list</label>
-                    <input type="text" id="custom-skills" placeholder="e.g. spanish, genetics, chess-coaching"
-                           value="${uncataloguedExisting.join(', ')}">
-                </div>
-            </fieldset>`;
-        stepsContainer.appendChild(customStep);
-
-        updateStepDisplay();
-    }
-
-    function updateStepDisplay() {
-        document.querySelectorAll(".question-step").forEach((step) => {
-            step.style.display = (parseInt(step.dataset.question) === currentStep) ? "block" : "none";
-        });
-
-        currentQuestionEl.textContent = currentStep + 1;
-        progressBar.value = currentStep + 1;
-        prevBtn.disabled = currentStep === 0;
-
-        if (currentStep === totalSteps - 1) {
-            nextBtn.style.display = "none";
-            submitBtn.style.display = "inline-block";
-        } else {
-            nextBtn.style.display = "inline-block";
-            submitBtn.style.display = "none";
-            nextBtn.textContent = "Next";
-        }
-    }
-
-    nextBtn.addEventListener("click", () => {
-        if (currentStep < totalSteps - 1) {
-            currentStep++;
-            updateStepDisplay();
-        }
+  function loadQuestion() {
+    const skill=skills[currentSkill];
+    document.getElementById("challenge-skill").textContent = `${display(skill)} · ${title(tier)} level`;
+    document.getElementById("challenge-description").textContent = tier === "beginner" ? "Start with a foundation problem. Solve it to unlock the intermediate challenge." : tier === "intermediate" ? "You’ve unlocked an applied problem. Solve it to face the expert challenge." : "This final scenario tests judgement and the way you approach complexity.";
+    document.getElementById("challenge-progress").textContent = `${currentSkill + 1} / ${skills.length}`;
+    questionBox.innerHTML = `<div class="loading-card">Finding a ${title(tier).toLowerCase()} problem for ${display(skill)}…</div>`;
+    fetch(`/api/assessment/question?skill=${encodeURIComponent(skill)}&tier=${tier}`).then(response => response.json().then(data=>({ok:response.ok,data}))).then(({ok,data}) => { if(!ok)throw new Error(data.message); renderQuestion(data.question); }).catch(error => questionBox.innerHTML=`<p class="form-message error">${error.message}</p>`);
+  }
+  function renderQuestion(question) {
+    questionBox.innerHTML = `<fieldset class="challenge-question"><legend><span>${title(question.tier)}</span>${question.question}</legend>${question.options.map((option,index)=>`<label><input type="radio" name="answer" value="${index}"><i>${String.fromCharCode(65+index)}</i>${option}</label>`).join("")}<p id="question-feedback" class="form-message"></p><button class="btn primary" id="submit-answer">Check answer →</button></fieldset>`;
+    let gradedResult = null;
+    document.getElementById("submit-answer").addEventListener("click", () => {
+      if (gradedResult) { advance(question, gradedResult); } else { grade(question, data => { gradedResult = data; }); }
     });
-
-    prevBtn.addEventListener("click", () => {
-        if (currentStep > 0) {
-            currentStep--;
-            updateStepDisplay();
-        }
-    });
-
-    form.addEventListener("submit", (e) => {
-        e.preventDefault();
-
-        const checkedSkills = Array.from(
-            document.querySelectorAll('input[name="skills"]:checked')
-        ).map((el) => el.value);
-
-        const customInput = document.getElementById("custom-skills");
-        const customSkills = customInput
-            ? customInput.value.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
-            : [];
-
-        const allSkills = Array.from(new Set([...checkedSkills, ...customSkills]));
-
-        fetch("/api/assess", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ skills: allSkills }),
-        })
-            .then((res) => res.json())
-            .then((data) => {
-                if (data.status === "success") {
-                    alert(`Assessment saved! ${allSkills.length} skill(s) on your profile.`);
-                    window.location.href = "/";
-                } else {
-                    alert("Error saving assessment: " + data.message);
-                }
-            })
-            .catch((err) => console.error("Submit error:", err));
-    });
+  }
+  function grade(question, onGraded) {
+    const selected=document.querySelector("input[name=answer]:checked"), feedback=document.getElementById("question-feedback"), button=document.getElementById("submit-answer");
+    if(!selected){feedback.textContent="Select an answer before continuing."; feedback.className="form-message error";return;} button.disabled=true; button.textContent="Checking…";
+    fetch("/api/assessment/grade",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({skill:question.skill,tier:question.tier,answer:selected.value})}).then(response=>response.json().then(data=>({ok:response.ok,data}))).then(({ok,data})=>{if(!ok)throw new Error(data.message); feedback.textContent=data.correct?`Correct — ${data.next_tier ? `you’ve unlocked the ${title(data.next_tier)} level.` : "you’ve completed this skill path."}`:`Not quite. You’ve demonstrated ${data.level} readiness in ${display(question.skill)}.`;feedback.className=`form-message ${data.correct?"success":"error"}`; button.textContent=data.complete?"Continue to next skill →":`Try ${title(data.next_tier)} level →`; button.disabled=false; onGraded(data);}).catch(error=>{feedback.textContent=error.message;feedback.className="form-message error";button.disabled=false;button.textContent="Check answer →";});
+  }
+  function advance(question, data) { if(data.complete){results[question.skill]=data.level;currentSkill++;if(currentSkill===skills.length)finishChallenges();else{tier="beginner";document.getElementById("challenge-eyebrow").textContent=`Skill ${currentSkill+1} of ${skills.length}`;loadQuestion();}}else{tier=data.next_tier;loadQuestion();} }
+  function finishChallenges(){section.classList.add("hidden");saveSection.classList.remove("hidden");saveSection.querySelector("b").textContent=`Results ready: ${Object.entries(results).map(([skill,level])=>`${display(skill)} · ${level}`).join(" | ")}`;}
+  document.getElementById("save-assessment").addEventListener("click",()=>{const button=document.getElementById("save-assessment");button.disabled=true;button.textContent="Saving your profile…";fetch("/api/assess",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}).then(response=>response.json().then(data=>({ok:response.ok,data}))).then(({ok,data})=>{if(!ok)throw new Error(data.message);window.location.href="/profile";}).catch(error=>{alert(error.message);button.disabled=false;button.textContent="Save my skill profile →";});});
+  const display=value=>value.replaceAll("-"," ").replace(/\b\w/g,letter=>letter.toUpperCase()); const title=value=>value[0].toUpperCase()+value.slice(1);
 });
