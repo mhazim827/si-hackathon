@@ -26,19 +26,25 @@ def match_student_to_opportunity(student, opportunity):
     missing_skills = sorted(required_skills - student_skills)
     matched_preferred = sorted(student_skills & preferred_skills)
 
-    # Required Skills (80% Weight)
+    # A match should be meaningful even when an opportunity has no optional
+    # skills. Previously a role with optional skills could cap a candidate at
+    # 80%, and weakly-normalised data made obvious overlaps look unconvincing.
+    # Required capability is worth 70%; optional capability fills the
+    # remaining 30%. If no optional capability is listed, required skills
+    # account for the full score.
     if required_skills:
-        required_score = (len(matched_required) / len(required_skills)) * 80
+        required_weight = 70 if preferred_skills else 100
+        required_score = (len(matched_required) / len(required_skills)) * required_weight
     else:
-        required_score = 80.0
+        required_score = 70.0 if preferred_skills else 100.0
 
     # Preferred Skills (20% Weight)
     if preferred_skills:
-        preferred_score = (len(matched_preferred) / len(preferred_skills)) * 20
+        preferred_score = (len(matched_preferred) / len(preferred_skills)) * 30
     else:
         preferred_score = 0.0
 
-    match_score = round(required_score + preferred_score, 2)
+    match_score = min(100, round(required_score + preferred_score, 0))
 
     # Status Label
     if match_score >= 75:
@@ -56,7 +62,13 @@ def match_student_to_opportunity(student, opportunity):
         "match_score": match_score,
         "status": status,
         "matched_skills": matched_required + matched_preferred,
-        "missing_skills": missing_skills
+        "missing_skills": missing_skills,
+        "why_match": (
+            f"You already meet {len(matched_required)} of {len(required_skills)} core skill"
+            f"{'s' if len(required_skills) != 1 else ''}"
+            + (f" and add {len(matched_preferred)} preferred strength{'s' if len(matched_preferred) != 1 else ''}." if preferred_skills else ".")
+        ),
+        "learning_path": missing_skills[:3]
     }
 
 def get_recommendations(student, opportunities):

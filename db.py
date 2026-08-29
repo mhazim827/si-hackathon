@@ -151,8 +151,9 @@ def init_db():
 
         count = result.fetchone()["count"]
 
-        if count == 0:
-            _seed_data(conn)
+        # Seeding is idempotent, so a new domain-relevant demo catalogue can
+        # safely be added to an existing development database as well.
+        _seed_data(conn)
 
         conn.commit()
 
@@ -327,85 +328,105 @@ def _seed_data(conn):
     opportunities = [
 
         {
-            "title": "UI/UX Design Intern",
-            "company": "PixelForge Studio",
+            "title": "Ayurvedic Pharma QA Intern",
+            "company": "AryaVeda Pharmaceuticals",
             "type": "Internship",
             "description": (
-                "Turn user research into accessible interfaces "
-                "alongside a product design team."
+                "Support GMP documentation, batch-record review, and quality "
+                "checks for classical Ayurvedic formulations."
+            ),
+            "location": "Haridwar / On-site",
+            "duration": "3 months",
+            "required_skills": [
+                "pharmacognosy",
+                "quality-assurance"
+            ],
+            "preferred_skills": [
+                "medical-documentation",
+                "clinical-practice"
+            ]
+        },
+
+        {
+            "title": "Panchakarma Research Assistant",
+            "company": "Swasthya Research Hospital",
+            "type": "Research",
+            "description": (
+                "Document clinical outcomes and support evidence-led research "
+                "on integrative Panchakarma care pathways."
+            ),
+            "location": "New Delhi / On-site",
+            "duration": "6 months",
+            "required_skills": [
+                "panchakarma",
+                "clinical-practice",
+                "clinical-research"
+            ],
+            "preferred_skills": [
+                "biostatistics",
+                "medical-documentation"
+            ]
+        },
+
+        {
+            "title": "Yoga Therapy Programme Intern",
+            "company": "Prana Integrative Care",
+            "type": "Internship",
+            "description": (
+                "Assist yoga therapists with patient education, session records, "
+                "and community wellness programme design."
             ),
             "location": "Bengaluru / Hybrid",
             "duration": "3 months",
             "required_skills": [
-                "graphic-design",
-                "figma"
+                "yoga-therapy",
+                "patient-counselling"
             ],
             "preferred_skills": [
-                "html",
-                "css"
+                "medical-documentation",
+                "wellness-program-design"
             ]
         },
 
         {
-            "title": "Biology Research Assistant",
-            "company": "GreenLeaf Labs",
-            "type": "Research",
-            "description": (
-                "Support lab experiments, data capture, and "
-                "evidence-led reporting on a live research project."
-            ),
-            "location": "Pune / On-site",
-            "duration": "6 months",
-            "required_skills": [
-                "lab-safety",
-                "microscopy",
-                "data-recording"
-            ],
-            "preferred_skills": [
-                "statistics",
-                "report-writing"
-            ]
-        },
-
-        {
-            "title": "Marketing & Content Intern",
-            "company": "Northwind Media",
-            "type": "Internship",
-            "description": (
-                "Plan campaign content, interpret audience signals, "
-                "and build a portfolio of published work."
-            ),
-            "location": "Remote",
-            "duration": "3 months",
-            "required_skills": [
-                "content-writing",
-                "social-media"
-            ],
-            "preferred_skills": [
-                "seo",
-                "graphic-design"
-            ]
-        },
-
-        {
-            "title": "Data Analytics Apprentice",
-            "company": "InsightForge",
+            "title": "Ayush Hospital Operations Apprentice",
+            "company": "Arogya Ayush Hospital",
             "type": "Apprenticeship",
             "description": (
-                "Learn to turn real operational data into dashboards "
-                "and clear business decisions."
+                "Build service dashboards and improve patient flow within an "
+                "Ayush hospital care-delivery team."
             ),
-            "location": "Remote / Hybrid",
+            "location": "Chennai / Hybrid",
             "duration": "4 months",
             "required_skills": [
-                "python",
-                "sql",
-                "data-analysis"
+                "hospital-administration",
+                "medical-documentation",
+                "biostatistics"
             ],
             "preferred_skills": [
-                "statistics",
-                "excel"
+                "patient-counselling",
+                "quality-assurance"
             ]
+        },
+        {
+            "title": "Sanskrit Texts & Clinical Knowledge Intern",
+            "company": "Veda Knowledge Centre",
+            "type": "Internship",
+            "description": "Help map classical Sanskrit references to structured clinical learning resources for students and practitioners.",
+            "location": "Remote / New Delhi",
+            "duration": "3 months",
+            "required_skills": ["sanskrit-texts", "clinical-practice"],
+            "preferred_skills": ["medical-documentation", "research-ethics"]
+        },
+        {
+            "title": "Herbal Pharmacognosy Lab Trainee",
+            "company": "Bharat Botanicals Research Lab",
+            "type": "Research",
+            "description": "Support authenticated raw-material review and evidence capture for Ayurvedic herbal formulations.",
+            "location": "Pune / On-site",
+            "duration": "4 months",
+            "required_skills": ["pharmacognosy", "quality-assurance"],
+            "preferred_skills": ["clinical-research", "medical-documentation"]
         }
     ]
 
@@ -552,7 +573,8 @@ def create_student(
     conn,
     name,
     username,
-    password_hash
+    password_hash,
+    email
 ):
 
     result = conn.execute(
@@ -560,15 +582,17 @@ def create_student(
         INSERT INTO students(
             name,
             username,
-            password_hash
+            password_hash,
+            email
         )
-        VALUES (?, ?, ?)
+        VALUES (?, ?, ?, ?)
         RETURNING id
         """,
         (
             name,
             username,
-            password_hash
+            password_hash,
+            email
         )
     )
 
@@ -777,10 +801,18 @@ def opportunities_with_skills(
 
     args = []
 
+    # Retire the original generic hackathon placeholders from all visible
+    # workspaces. Existing user-created postings remain untouched.
+    sql += """
+        WHERE o.company NOT IN (
+            'PixelForge Studio', 'GreenLeaf Labs', 'Northwind Media', 'InsightForge'
+        )
+    """
+
     if poster_id:
 
         sql += """
-            WHERE o.posted_by_account_id = ?
+            AND o.posted_by_account_id = ?
         """
 
         args.append(poster_id)
@@ -948,11 +980,7 @@ def applications_for_industry(
     conn,
     account_id
 ):
-
-    return [
-        dict(row)
-
-        for row in conn.execute(
+    applications = [dict(row) for row in conn.execute(
             """
             SELECT
                 ap.*,
@@ -984,6 +1012,28 @@ def applications_for_industry(
             (account_id,)
         ).fetchall()
     ]
+    for application in applications:
+        skills = set(student_skills(conn, application["student_id"]))
+        requirements = conn.execute(
+            """
+            SELECT s.name, os.weight_type
+            FROM opportunity_skills os
+            JOIN skills s ON s.id = os.skill_id
+            WHERE os.opportunity_id = ?
+            """, (application["opportunity_id"],)
+        ).fetchall()
+        required = {row["name"] for row in requirements if row["weight_type"] == "required"}
+        preferred = {row["name"] for row in requirements if row["weight_type"] == "preferred"}
+        matched_required = sorted(skills & required)
+        matched_preferred = sorted(skills & preferred)
+        required_weight = 70 if preferred else 100
+        score = (len(matched_required) / len(required) * required_weight) if required else required_weight
+        if preferred:
+            score += len(matched_preferred) / len(preferred) * 30
+        application["compatibility"] = round(min(score, 100))
+        application["matched_skills"] = matched_required + matched_preferred
+        application["missing_skills"] = sorted(required - skills)
+    return sorted(applications, key=lambda item: (-item["compatibility"], item["name"].lower()))
 
 
 # =========================================================
@@ -1123,3 +1173,405 @@ def dashboard_stats(
             """
         ).fetchone()[0]
     }
+
+# =========================================================
+# Email verification (OTP)
+# =========================================================
+
+def set_verification_code(conn, account_id, code, expires_at):
+
+    conn.execute(
+        """
+        UPDATE accounts
+        SET verification_code = ?,
+            verification_expires = ?
+        WHERE id = ?
+        """,
+        (code, expires_at, account_id)
+    )
+
+    conn.commit()
+
+
+def get_verification(conn, account_id):
+
+    return conn.execute(
+        """
+        SELECT verification_code, verification_expires
+        FROM accounts
+        WHERE id = ?
+        """,
+        (account_id,)
+    ).fetchone()
+
+
+def clear_verification_code(conn, account_id):
+
+    conn.execute(
+        """
+        UPDATE accounts
+        SET verified = TRUE,
+            verification_code = NULL,
+            verification_expires = NULL
+        WHERE id = ?
+        """,
+        (account_id,)
+    )
+
+    conn.commit()
+
+
+# =========================================================
+# Opportunities: delete
+# =========================================================
+
+def delete_opportunity(conn, opportunity_id, account_id):
+    """
+    Deletes an opportunity only if it belongs to the requesting
+    industry account. Returns the number of rows deleted (0 or 1).
+    opportunity_skills and applications cascade-delete via the
+    foreign keys defined in supabase_schema.sql.
+    """
+
+    result = conn.execute(
+        """
+        DELETE FROM opportunities
+        WHERE id = ?
+          AND posted_by_account_id = ?
+        """,
+        (opportunity_id, account_id)
+    )
+
+    conn.commit()
+
+    return result.rowcount
+
+
+# =========================================================
+# Academician: student directory & industry partners
+# =========================================================
+
+def all_students_summary(conn):
+    """
+    Every student profile visible to academicians, including
+    their verified skill levels (reuses student_skills()).
+    """
+
+    rows = conn.execute(
+        """
+        SELECT id, name, username, headline
+        FROM students
+        ORDER BY name
+        """
+    ).fetchall()
+
+    students = []
+
+    for row in rows:
+        data = dict(row)
+        data["skills"] = student_skills(conn, row["id"], include_levels=True)
+        students.append(data)
+
+    return students
+
+
+def industry_partners(conn):
+
+    return [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT id, name, organisation
+            FROM accounts
+            WHERE role = 'industry'
+            ORDER BY organisation
+            """
+        ).fetchall()
+    ]
+
+
+# =========================================================
+# Collaboration requests (academician <-> industry)
+# =========================================================
+
+def create_collaboration_request(conn, academician_id, industry_account_id, opportunity_id, message):
+
+    result = conn.execute(
+        """
+        INSERT INTO collaboration_requests(
+            academician_id,
+            industry_account_id,
+            opportunity_id,
+            message
+        )
+        VALUES (?, ?, ?, ?)
+        RETURNING id
+        """,
+        (academician_id, industry_account_id, opportunity_id, message)
+    )
+
+    ident = result.fetchone()["id"]
+
+    conn.commit()
+
+    return ident
+
+
+def collaboration_requests_for_academician(conn, academician_id):
+
+    return [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT
+                cr.*,
+                a.organisation AS industry_organisation,
+                a.name AS industry_name
+
+            FROM collaboration_requests cr
+
+            JOIN accounts a
+                ON a.id = cr.industry_account_id
+
+            WHERE cr.academician_id = ?
+
+            ORDER BY cr.created_at DESC
+            """,
+            (academician_id,)
+        ).fetchall()
+    ]
+
+
+def collaboration_requests_for_industry(conn, industry_account_id):
+
+    return [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT
+                cr.*,
+                a.name AS academician_name,
+                a.organisation AS academician_organisation
+
+            FROM collaboration_requests cr
+
+            JOIN accounts a
+                ON a.id = cr.academician_id
+
+            WHERE cr.industry_account_id = ?
+
+            ORDER BY cr.created_at DESC
+            """,
+            (industry_account_id,)
+        ).fetchall()
+    ]
+
+
+def update_collaboration_request_status(conn, request_id, industry_account_id, status):
+    """
+    Only the industry account the request was sent to can accept/decline it.
+    Returns the number of rows updated (0 or 1).
+    """
+
+    result = conn.execute(
+        """
+        UPDATE collaboration_requests
+        SET status = ?
+        WHERE id = ?
+          AND industry_account_id = ?
+        """,
+        (status, request_id, industry_account_id)
+    )
+
+    conn.commit()
+
+    return result.rowcount
+
+
+# =========================================================
+# Industry learning programmes & student registrations
+# =========================================================
+
+def learning_programs(conn):
+    return [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT lp.*, COALESCE(a.organisation, a.name, lp.publisher_name) AS provider
+            FROM learning_programs lp
+            LEFT JOIN accounts a ON a.id = lp.publisher_account_id
+            ORDER BY lp.created_at DESC, lp.id DESC
+            """
+        ).fetchall()]
+
+
+def create_learning_program(conn, account_id, data):
+    result = conn.execute(
+        """
+        INSERT INTO learning_programs(
+            publisher_account_id, publisher_name, title, format, mode, duration, skills, audience, description
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        RETURNING id
+        """,
+        (
+            account_id, data["publisher_name"], data["title"], data["format"], data.get("mode", "Online"),
+            data["duration"], data["skills"], data.get("audience", "Students"), data["description"]
+        )
+    )
+
+
+def email_taken(conn, email):
+    return bool(conn.execute(
+        """
+        SELECT 1 FROM students WHERE lower(email) = lower(?)
+        UNION ALL
+        SELECT 1 FROM accounts WHERE lower(email) = lower(?)
+        LIMIT 1
+        """, (email, email)
+    ).fetchone())
+    ident = result.fetchone()["id"]
+    conn.commit()
+    return ident
+
+
+def register_for_learning_program(conn, student_id, program_id):
+    program = conn.execute(
+        """
+        SELECT lp.*, COALESCE(a.organisation, a.name, lp.publisher_name) AS provider
+        FROM learning_programs lp
+        LEFT JOIN accounts a ON a.id = lp.publisher_account_id
+        WHERE lp.id = ?
+        """,
+        (program_id,)
+    ).fetchone()
+    student = conn.execute("SELECT name, email FROM students WHERE id = ?", (student_id,)).fetchone()
+    if not program or not student:
+        return None, False
+    if not student["email"]:
+        return {"program": dict(program), "student": dict(student)}, None
+    created = conn.execute(
+        """
+        INSERT INTO programme_registrations(student_id, learning_program_id)
+        VALUES (?, ?)
+        ON CONFLICT (student_id, learning_program_id) DO NOTHING
+        RETURNING id
+        """,
+        (student_id, program_id)
+    ).fetchone()
+    conn.commit()
+    return {"program": dict(program), "student": dict(student)}, bool(created)
+
+
+def registered_learning_program_ids(conn, student_id):
+    return {
+        row["learning_program_id"]
+        for row in conn.execute(
+            "SELECT learning_program_id FROM programme_registrations WHERE student_id = ?",
+            (student_id,)
+        ).fetchall()
+    }
+
+
+def programme_registrations_for_publisher(conn, publisher_id):
+    rows = conn.execute(
+        """
+        SELECT pr.registered_at, lp.id AS program_id, lp.title AS program_title,
+               s.id AS student_id, s.name, s.email, s.headline
+        FROM programme_registrations pr
+        JOIN learning_programs lp ON lp.id = pr.learning_program_id
+        JOIN students s ON s.id = pr.student_id
+        WHERE lp.publisher_account_id = ?
+        """, (publisher_id,)
+    ).fetchall()
+    registrations = []
+    for row in rows:
+        registrations.append({
+            "program_id": row["program_id"], "program_title": row["program_title"],
+            "name": row["name"], "email": row["email"], "headline": row["headline"],
+            "registered_at": row["registered_at"],
+        })
+    return sorted(registrations, key=lambda item: (item["program_title"].lower(), str(item["registered_at"])), reverse=True)
+
+
+def registered_learning_programs_for_student(conn, student_id):
+    return [dict(row) for row in conn.execute(
+        """
+        SELECT lp.*, COALESCE(a.organisation, a.name, lp.publisher_name) AS provider,
+               pr.status, pr.registered_at
+        FROM programme_registrations pr
+        JOIN learning_programs lp ON lp.id = pr.learning_program_id
+        LEFT JOIN accounts a ON a.id = lp.publisher_account_id
+        WHERE pr.student_id = ?
+        ORDER BY pr.registered_at DESC
+        """, (student_id,)).fetchall()]
+
+
+# =========================================================
+# Publisher announcements
+# =========================================================
+
+def create_announcement(conn, publisher_id, target_type, target_id, subject, message):
+    if target_type == "opportunity":
+        target = conn.execute(
+            "SELECT id, title FROM opportunities WHERE id = ? AND posted_by_account_id = ?",
+            (target_id, publisher_id)
+        ).fetchone()
+        recipient_query = "SELECT student_id FROM applications WHERE opportunity_id = ?"
+        column = "opportunity_id"
+    else:
+        target = conn.execute(
+            "SELECT id, title FROM learning_programs WHERE id = ? AND publisher_account_id = ?",
+            (target_id, publisher_id)
+        ).fetchone()
+        recipient_query = "SELECT student_id FROM programme_registrations WHERE learning_program_id = ?"
+        column = "learning_program_id"
+    if not target:
+        return None, 0
+    recipient_ids = [row["student_id"] for row in conn.execute(recipient_query, (target_id,)).fetchall()]
+    if not recipient_ids:
+        return {"target": dict(target)}, 0
+    announcement_id = conn.execute(
+        f"""
+        INSERT INTO announcements(publisher_account_id, {column}, subject, message)
+        VALUES (?, ?, ?, ?)
+        RETURNING id
+        """,
+        (publisher_id, target_id, subject, message)
+    ).fetchone()["id"]
+    for student_id in recipient_ids:
+        conn.execute(
+            "INSERT INTO announcement_recipients(announcement_id, student_id) VALUES (?, ?)",
+            (announcement_id, student_id)
+        )
+    conn.commit()
+    return {"target": dict(target), "announcement_id": announcement_id}, len(recipient_ids)
+
+
+def announcements_for_student(conn, student_id):
+    return [dict(row) for row in conn.execute(
+        """
+        SELECT an.*, COALESCE(a.organisation, a.name) AS publisher,
+               COALESCE(o.title, lp.title) AS target_title
+        FROM announcement_recipients ar
+        JOIN announcements an ON an.id = ar.announcement_id
+        LEFT JOIN accounts a ON a.id = an.publisher_account_id
+        LEFT JOIN opportunities o ON o.id = an.opportunity_id
+        LEFT JOIN learning_programs lp ON lp.id = an.learning_program_id
+        WHERE ar.student_id = ?
+        ORDER BY an.created_at DESC
+        """, (student_id,)).fetchall()]
+
+
+def announcements_for_academician(conn):
+    return [dict(row) for row in conn.execute(
+        """
+        SELECT an.*, COALESCE(a.organisation, a.name) AS publisher,
+               COALESCE(o.title, lp.title) AS target_title
+        FROM announcements an
+        LEFT JOIN accounts a ON a.id = an.publisher_account_id
+        LEFT JOIN opportunities o ON o.id = an.opportunity_id
+        LEFT JOIN learning_programs lp ON lp.id = an.learning_program_id
+        ORDER BY an.created_at DESC
+        LIMIT 30
+        """).fetchall()]
