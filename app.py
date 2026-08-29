@@ -2,6 +2,7 @@ import os
 import re
 import random
 import smtplib
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from functools import wraps
@@ -167,11 +168,22 @@ def register_api():
     if len(password) < 6: return jsonify(status="error", message="Use a password with at least 6 characters."), 400
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email): return jsonify(status="error", message="Enter a valid email address so we can send programme registrations."), 400
     conn = db_sqlite_backup.get_connection()
-    if db_sqlite_backup.username_taken(conn, username): conn.close(); return jsonify(status="error", message="That username is already in use."), 409
-    if db_sqlite_backup.email_taken(conn, email): conn.close(); return jsonify(status="error", message="An account already exists with that email address. Please log in instead."), 409
-    if role == "student": ident = db_sqlite_backup.create_student(conn, name, username, generate_password_hash(password), email)
-    else: ident = db_sqlite_backup.create_account(conn, role, name, username, generate_password_hash(password), (payload.get("organisation") or "").strip(), (payload.get("email") or "").strip())
-    conn.close(); set_session(role, ident, name)
+    try:
+        if db_sqlite_backup.username_taken(conn, username):
+            return jsonify(status="error", message="That username is already in use."), 409
+        if db_sqlite_backup.email_taken(conn, email):
+            return jsonify(status="error", message="An account already exists with that email address. Please log in instead."), 409
+        if role == "student":
+            ident = db_sqlite_backup.create_student(conn, name, username, generate_password_hash(password), email)
+        else:
+            ident = db_sqlite_backup.create_account(conn, role, name, username, generate_password_hash(password), (payload.get("organisation") or "").strip(), email)
+    except sqlite3.IntegrityError as error:
+        conn.rollback()
+        message = "An account already exists with that email address. Please log in instead." if "email" in str(error).lower() else "That username is already in use."
+        return jsonify(status="error", message=message), 409
+    finally:
+        conn.close()
+    set_session(role, ident, name)
     return jsonify(status="success", redirect=url_for("assessment") if role == "student" else url_for("home")), 201
 
 @app.route("/api/login", methods=["POST"])
@@ -533,16 +545,27 @@ def faculty_programs_api():
 @login_required
 @role_required("student")
 def apply_api(opportunity_id):
-    conn = db_sqlite_backup.get_connection(); opp = conn.execute("SELECT posted_by_account_id FROM opportunities WHERE id=?", (opportunity_id,)).fetchone()
-    if not opp: conn.close(); return jsonify(status="error", message="Opportunity not found."), 404
-    existing = conn.execute("SELECT id FROM applications WHERE student_id=? AND opportunity_id=?", (user_id(), opportunity_id)).fetchone()
-    if existing:
-        conn.close()
+    conn = db_sqlite_backup.get_connection()
+    try:
+        opp = conn.execute("SELECT posted_by_account_id FROM opportunities WHERE id=?", (opportunity_id,)).fetchone()
+        if not opp:
+            return jsonify(status="error", message="Opportunity not found."), 404
+        existing = conn.execute("SELECT id FROM applications WHERE student_id=? AND opportunity_id=?", (user_id(), opportunity_id)).fetchone()
+        if existing:
+            return jsonify(status="success", message="You have already applied for this opportunity.", already_applied=True)
+        conn.execute("INSERT INTO applications(student_id, opportunity_id) VALUES (?, ?)", (user_id(), opportunity_id))
+        if opp["posted_by_account_id"]:
+            conn.execute("INSERT INTO notifications(account_id, message, link) VALUES (?, ?, ?)", (opp["posted_by_account_id"], f"New candidate application from {session['user_name']}", "/"))
+        conn.commit()
+        return jsonify(status="success", message="Application submitted. You can track every update in your profile.")
+    except sqlite3.IntegrityError:
+        conn.rollback()
         return jsonify(status="success", message="You have already applied for this opportunity.", already_applied=True)
-    conn.execute("INSERT INTO applications(student_id, opportunity_id) VALUES (?, ?)", (user_id(), opportunity_id))
-    if opp["posted_by_account_id"]:
-        conn.execute("INSERT INTO notifications(account_id, message, link) VALUES (?, ?, ?)", (opp["posted_by_account_id"], f"New candidate application from {session['user_name']}", "/"))
-    conn.commit(); conn.close(); return jsonify(status="success", message="Application submitted. You can track every update in your profile.")
+    except sqlite3.Error:
+        conn.rollback()
+        return jsonify(status="error", message="Your application could not be saved. Please try again."), 503
+    finally:
+        conn.close()
 
 @app.route("/api/profile", methods=["GET", "PUT"])
 @login_required
@@ -553,9 +576,21 @@ def profile_api():
         if role == "student" and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", (data.get("email") or "").strip()):
             conn.close()
             return jsonify(status="error", message="Enter a valid email address for your student profile."), 400
-        if role == "student": conn.execute("UPDATE students SET name=?, headline=?, bio=?, email=? WHERE id=?", ((data.get("name") or "").strip(), (data.get("headline") or "").strip(), (data.get("bio") or "").strip(), (data.get("email") or "").strip().lower(), ident))
-        else: conn.execute("UPDATE accounts SET name=?, organisation=?, email=? WHERE id=?", ((data.get("name") or "").strip(), (data.get("organisation") or "").strip(), (data.get("email") or "").strip(), ident))
-        conn.commit(); session["user_name"] = (data.get("name") or session["user_name"]).strip()
+        try:
+            if role == "student":
+                conn.execute("UPDATE students SET name=?, headline=?, bio=?, email=? WHERE id=?", ((data.get("name") or "").strip(), (data.get("headline") or "").strip(), (data.get("bio") or "").strip(), (data.get("email") or "").strip().lower(), ident))
+            else:
+                conn.execute("UPDATE accounts SET name=?, organisation=?, email=? WHERE id=?", ((data.get("name") or "").strip(), (data.get("organisation") or "").strip(), (data.get("email") or "").strip().lower(), ident))
+            conn.commit()
+            session["user_name"] = (data.get("name") or session["user_name"]).strip()
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            conn.close()
+            return jsonify(status="error", message="Another account already uses that email address."), 409
+        except sqlite3.Error:
+            conn.rollback()
+            conn.close()
+            return jsonify(status="error", message="Your profile could not be saved. Please try again."), 503
     user = db_sqlite_backup.student_by_id(conn, ident) if role == "student" else db_sqlite_backup.account_by_id(conn, ident)
     if not user:
         conn.close()

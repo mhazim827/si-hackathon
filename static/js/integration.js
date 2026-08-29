@@ -1,5 +1,12 @@
 const esc = v => String(v || "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#039;",'"':"&quot;"}[c]));
-const api = (url, options = {}) => fetch(url, options).then(async r => { const body = await r.json(); if (!r.ok) throw new Error(body.message || "Something went wrong."); return body; });
+const api = (url, options = {}) => fetch(url, options).then(async r => {
+  const raw = await r.text();
+  let body;
+  try { body = JSON.parse(raw); }
+  catch { throw new Error("The server returned an unexpected response. Please restart SkillBridge and try again."); }
+  if (!r.ok) throw new Error(body.message || "Something went wrong.");
+  return body;
+});
 const tags = (list, cls, fallback = "") => list?.length ? list.map(x => `<i class="${cls}">${esc(x)}</i>`).join("") : `<i class="neutral-tag">${fallback}</i>`;
 const empty = (title, text) => `<div class="empty-state"><h3>${esc(title)}</h3><p>${esc(text)}</p></div>`;
 
@@ -32,5 +39,32 @@ function studentProfile(d){const r=d.readiness;return `<div class="profile-grid"
 function industryProfile(d){return `<div class="profile-grid"><section class="surface profile-wide"><p class="eyebrow">Organisation profile</p><h2>${esc(d.user.organisation||d.user.name)}</h2><p class="muted">Role access: industry partners can publish openings, learning programmes and candidate decisions.</p><div class="stat-strip"><span><b>${d.stats.opportunities}</b> live roles</span><span><b>${d.stats.applications}</b> applications</span><span><b>${d.stats.shortlisted}</b> in pipeline</span></div></section><section class="surface profile-wide"><p class="eyebrow">Industry learning programmes</p>${d.learning_programs.map(p=>`<div class="mini-row"><div><b>${esc(p.title)}</b><span>${esc(p.format)} · ${esc(p.duration)}</span></div><span class="type-pill">${esc(p.provider)}</span></div>`).join("")}</section></div>`;}
 function academicProfile(d){return `<div class="profile-grid"><section class="surface profile-wide"><p class="eyebrow">Academic partner profile</p><h2>${esc(d.user.organisation||d.user.name)}</h2><p class="muted">Role access: academic partners can view cohort insights and request industry collaboration.</p><div class="stat-strip"><span><b>${d.stats.students}</b> learners visible</span><span><b>${d.stats.opportunities}</b> opportunities</span><span><b>${d.stats.industry_partners}</b> partners</span></div><button class="btn primary small" data-open-collab>Request collaboration →</button></section><section class="surface profile-wide"><p class="eyebrow">Faculty-facing opportunities</p>${d.faculty_programs.map(p=>`<div class="mini-row"><div><b>${esc(p.title)}</b><span>${esc(p.company)} · ${esc(p.type)}</span></div><span class="type-pill">${esc(p.duration)}</span></div>`).join("")}</section></div>`;}
 function deleteOpportunity(b,done){if(!confirm("Delete this opportunity? This also removes applications."))return;b.disabled=true;api(`/api/opportunities/${b.dataset.deleteOpportunity}`,{method:"DELETE"}).then(done).catch(e=>{alert(e.message);b.disabled=false;});}
-function wireProfileActions(d){const add=document.querySelector("[data-add-portfolio]"),dialog=document.querySelector("#portfolio-dialog"),form=document.querySelector("#portfolio-form");if(add)add.onclick=()=>dialog.showModal();document.querySelectorAll("[data-close-portfolio]").forEach(b=>b.onclick=()=>dialog.close());if(form)form.onsubmit=e=>{e.preventDefault();const m=document.querySelector("#portfolio-message");api("/api/portfolio",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(new FormData(form)))}).then(()=>{dialog.close();loadProfile();}).catch(err=>{m.textContent=err.message;m.className="form-message error";});};if(d.role==="academician")wireCollab(d);}
+function wireProfileActions(d){
+  const add=document.querySelector("[data-add-portfolio]"),dialog=document.querySelector("#portfolio-dialog"),form=document.querySelector("#portfolio-form");
+  if(add)add.onclick=()=>dialog.showModal();
+  document.querySelectorAll("[data-close-portfolio]").forEach(b=>b.onclick=()=>dialog.close());
+  if(form)form.onsubmit=e=>{e.preventDefault();const m=document.querySelector("#portfolio-message");api("/api/portfolio",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(new FormData(form)))}).then(()=>{dialog.close();loadProfile();}).catch(err=>{m.textContent=err.message;m.className="form-message error";});};
+
+  const editButton=document.querySelector("#edit-profile"), editDialog=document.querySelector("#edit-dialog"), editForm=document.querySelector("#profile-form"), fields=document.querySelector("#profile-form-fields"), message=document.querySelector("#profile-message");
+  document.querySelectorAll("[data-close-profile]").forEach(button=>button.onclick=()=>editDialog.close());
+  if(editButton && editDialog && editForm && fields){
+    editButton.onclick=()=>{
+      fields.innerHTML=d.role==="student"
+        ? `<label>Full name<input name="name" required value="${esc(d.user.name)}"></label><label>Headline<input name="headline" value="${esc(d.user.headline||"")}" placeholder="e.g. BAMS student · Panchakarma trainee"></label><label>Email<input name="email" type="email" required value="${esc(d.user.email||"")}"></label><label>About you<textarea name="bio" rows="4" placeholder="Share your interests and experience">${esc(d.user.bio||"")}</textarea></label>`
+        : `<label>Full name<input name="name" required value="${esc(d.user.name)}"></label><label>Organisation<input name="organisation" value="${esc(d.user.organisation||"")}"></label><label>Email<input name="email" type="email" value="${esc(d.user.email||"")}"></label>`;
+      message.textContent="";
+      message.className="form-message";
+      editDialog.showModal();
+    };
+    editForm.onsubmit=event=>{
+      event.preventDefault();
+      message.textContent="Saving…";
+      message.className="form-message";
+      api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(new FormData(editForm)))})
+        .then(()=>{message.textContent="Profile saved.";message.className="form-message success";setTimeout(()=>{editDialog.close();loadProfile();},500);})
+        .catch(error=>{message.textContent=error.message;message.className="form-message error";});
+    };
+  }
+  if(d.role==="academician")wireCollab(d);
+}
 function wireCollab(d){const dialog=document.querySelector("#collab-dialog"),open=document.querySelector("[data-open-collab]"),form=document.querySelector("#collab-form");if(!dialog||!open)return;open.onclick=()=>{document.querySelector("#collab-partner").innerHTML=d.industry_partners.map(p=>`<option value="${p.id}">${esc(p.organisation||p.name)}</option>`).join("");dialog.showModal();};document.querySelectorAll("[data-close-collab]").forEach(b=>b.onclick=()=>dialog.close());if(form)form.onsubmit=e=>{e.preventDefault();const m=document.querySelector("#collab-message");api("/api/collaboration-requests",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(new FormData(form)))}).then(r=>{m.textContent=r.message;m.className="form-message success";setTimeout(()=>{dialog.close();loadProfile();},700);}).catch(err=>{m.textContent=err.message;m.className="form-message error";});};}
