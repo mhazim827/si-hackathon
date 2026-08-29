@@ -26,10 +26,3 @@ SMTP_PASSWORD=your-gmail-app-password
 Without both values, registrations, candidate updates, collaboration updates,
 and announcements still work in the app. Their email content is printed in the
 server console instead of being sent.
-
-## Sharing the demo
-
-For a local hackathon demonstration, run `python app.py` and open
-`http://127.0.0.1:5000` in the browser on that computer. SQLite is ideal for
-this single-computer setup. A hosted, multi-user version would need a managed
-database and a production web server.
