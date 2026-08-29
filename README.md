@@ -1,107 +1,130 @@
 # SkillBridge
 
-Academia–industry collaboration platform: students assess their skills,
-get ranked internship/opportunity recommendations, and apply — all backed
-by a real database and login system instead of a static JSON file.
+SkillBridge is an Ayush-focused academia–industry collaboration platform built for the SI Hackathon. It connects students, industry partners, and academic institutions through verified skills, opportunity matching, learning programmes, recruitment workflows, and collaboration requests.
 
-## What changed from the original build
+## What it does
 
-1. **Login system.** `/register` and `/login` create/authenticate a
-   student account (`werkzeug` password hashing, Flask session cookies).
-   Every page and API route that touches personal data (`/`, `/assessment`,
-   `/api/opportunities`, `/api/assess`, `/api/apply`) requires a logged-in
-   session and always operates on *that* student — no more manually typing
-   in a student ID.
-2. **Database instead of `mock_data.json`.** Data now lives in
-   `data/skillbridge.db`, a SQLite database created from `schema.sql` the
-   first time the app runs. See "Why SQLite / where a real DB fits" below.
-3. **Domain-agnostic skill matching.** `matcher.py`'s scoring logic never
-   changed — it was always just set intersection over strings — but it's
-   now exercised across multiple domains on purpose. Seed data includes
-   opportunities in biology, chemistry, marketing, design, and finance, not
-   just software roles, to demonstrate matching for "sciences or anything."
-4. **Dynamic, multi-domain skill assessment.** The old assessment hard-coded
-   three programming questions as single-choice radio buttons. It's now
-   generated at runtime from `/api/skills-catalog`, uses checkboxes
-   (multi-select — a student can have several skills per category), spans
-   five categories (Programming, Data & Analytics, Science & Lab Skills,
-   Design & Creative, Business & Communication), and has a free-text field
-   for anything not listed, so no field is locked out.
-5. **Dynamic pages.** The dashboard shows the logged-in student's name and
-   pulls live, ranked recommendations from the database on every load;
-   "Apply Now" actually records an application (`applications` table)
-   instead of just showing an alert.
+- **Students** assess Ayush and health-science skills, receive ranked opportunities, apply, register for learning programmes, build a digital portfolio, and receive targeted announcements.
+- **Industry partners** publish opportunities and learning programmes, review applicants ranked by skill compatibility, update candidate stages, send announcements, and manage collaboration requests.
+- **Academicians** view institution signals, faculty-facing opportunities, industry partners, and collaboration pathways.
 
-## Project structure
+The demo data uses domain-relevant areas such as Panchakarma, pharmacognosy, clinical research, quality assurance, yoga therapy, hospital administration, and biostatistics.
 
-```
-si-hackathon/
-├── app.py                 # Flask routes: pages, auth API, opportunities/assess/apply API
-├── db.py                  # SQLite connection, schema init, seed migration, query helpers
-├── matcher.py              # Skill-matching/scoring engine (unchanged logic)
-├── schema.sql              # Table definitions
-├── requirements.txt
-├── data/
-│   ├── mock_data.json      # Legacy fixture — used once to seed the DB on first run
-│   └── skillbridge.db      # Created automatically, not committed (see .gitignore)
-├── static/
-│   ├── css/style.css
-│   └── js/{login,assessment,integration}.js
-└── templates/
-    ├── login.html / register.html
-    ├── index.html
-    └── assessment.html
+## Technology
+
+- Python + Flask
+- Supabase PostgreSQL
+- Psycopg2
+- Vanilla HTML, CSS, and JavaScript
+
+## Quick start
+
+### 1. Clone and create an environment
+
+```bash
+git clone <your-repository-url>
+cd si-hackathon
+python -m venv .venv
 ```
 
-## Running it
+Activate it:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+```bash
+source .venv/bin/activate
+```
+
+### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
+```
+
+### 3. Configure environment variables
+
+Copy `.env.example` to `.env` and fill in your Supabase PostgreSQL connection string.
+
+```env
+DATABASE_URL=postgresql://...
+SKILLBRIDGE_SECRET_KEY=replace-with-a-random-secret
+SMTP_EMAIL=your-sending-address@example.com
+SMTP_PASSWORD=your-app-password
+```
+
+`SMTP_EMAIL` and `SMTP_PASSWORD` are optional for local UI testing. Without them, outgoing messages are printed in the server console instead of sent.
+
+### 4. Initialise Supabase
+
+Run these files in the **Supabase SQL Editor**, in order:
+
+1. `supabase_schema.sql`
+2. `supabase_learning_programs_migration.sql`
+3. `supabase_announcements_migration.sql`
+
+The migration scripts are safe to rerun after a successful run. See [deployment notes](docs/DEPLOYMENT.md) if a case-insensitive email index finds old duplicate accounts.
+
+### 5. Start the app
+
+```bash
 python app.py
 ```
 
-Then open `http://127.0.0.1:5000`. First visit redirects to `/login`;
-click through to `/register` to create an account, or log in as one of the
-three students migrated from the old `mock_data.json`
-(`student1` / `student2` / `student374`, password `changeme123` for all —
-demo credentials only, meant to be replaced by real registrations).
+Open [http://127.0.0.1:5000](http://127.0.0.1:5000).
 
-## Why SQLite, and where a real database fits
+## Main workflows
 
-SQLite was chosen here because it needs no server, ships with Python, and
-is plenty fast for a hackathon demo's data volume — the whole database is
-one file (`data/skillbridge.db`).
+| Role | Key workflows |
+| --- | --- |
+| Student | Skill assessment, opportunity browse/filter, compatibility explanation, apply once, portfolio evidence, programme registration, personalised announcements |
+| Industry | Post opportunities/programmes, rank opportunity applicants, manage statuses, email candidates, review programme registrants, publish announcements, accept/reject collaborations |
+| Academician | View student/industry signals, browse faculty development opportunities, request collaboration, track request status |
 
-For an actual deployment (matching the "secure, scalable" platform the
-problem statement asks for), the natural next step is a client-server
-relational database:
+## Matching logic
 
-- **PostgreSQL** is the strongest general fit. It supports many
-  simultaneous writers (SQLite locks the whole file per write, which won't
-  scale once students, academicians, and industry users are all writing at
-  once), has real user roles/permissions to back the role-based access
-  (student / academician / industry / institution) described in the
-  problem statement, and has JSON columns if opportunity postings need
-  flexible extra fields per company.
-- **MySQL/MariaDB** is a reasonable alternative with a similar profile,
-  if your hosting stack already standardizes on it.
-- **MongoDB** is worth considering only if opportunity postings become
-  highly unstructured (arbitrary custom fields per company) — the core
-  student/skill/opportunity matching here is inherently relational
-  (many-to-many joins), which Postgres/MySQL model more naturally than a
-  document store.
+Opportunity matching compares a student’s verified skills with required and preferred skills:
 
-Because `db.py` is the only place that talks SQL, migrating means: standing
-up the new database, translating `schema.sql` (nearly 1:1 — SQLite's types
-map directly onto Postgres/MySQL types), and swapping `sqlite3.connect()`
-for a driver like `psycopg2`/SQLAlchemy. `app.py` and `matcher.py` don't
-need to change at all.
+- Required skills contribute **70%** of the result when preferred skills exist; otherwise they contribute **100%**.
+- Preferred skills contribute the remaining **30%**.
+- Every opportunity card explains the match and highlights a suggested learning path for missing core skills.
 
-## Still worth adding (out of scope for this pass)
+Industry applicant lists are ranked from highest to lowest compatibility. Learning-programme registrants are intentionally shown as a plain registration list, not ranked.
 
-- Role-based accounts for academicians and industry users (currently only
-  students can log in); industry-side posting of new opportunities through
-  the UI instead of seed data.
-- Password reset / email verification.
-- Digital portfolio (certifications, projects) and analytics dashboards
-  mentioned in the problem statement.
+## Email notifications
+
+When SMTP is configured, SkillBridge emails students when they:
+
+- register for a learning programme;
+- are moved to Under Review, Shortlisted, Interview, Selected, or Not Selected;
+- receive a publisher announcement; and
+- have a collaboration request accepted (academician account).
+
+The sending address and password must remain in `.env`; never commit them.
+
+## Repository layout
+
+```text
+app.py                                  Flask routes and email workflows
+db.py                                   PostgreSQL access helpers and queries
+matcher.py                              Skill-compatibility engine
+templates/                              Flask templates
+static/css/                             Dashboard styling
+static/js/                              Role-specific dashboard interactions
+supabase_schema.sql                     Base database schema
+supabase_learning_programs_migration.sql
+supabase_announcements_migration.sql    Follow-on Supabase migrations
+docs/DEPLOYMENT.md                      Database and deployment guidance
+```
+
+## Before pushing to GitHub
+
+- Confirm `.env` is ignored and has not been staged.
+- Do not commit Supabase URLs, passwords, SMTP credentials, or app-secret values.
+- Add a repository URL and screenshots to this README if required by the hackathon submission.
+- Run a quick smoke test: register an account, publish an opportunity, apply from a student account, change the application status, and check the email/notification flow.
+
+## License
+
+Add the license selected by your team before publishing publicly.
