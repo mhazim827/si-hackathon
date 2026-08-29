@@ -1,6 +1,7 @@
 """Local SQLite data access for the SkillBridge hackathon experience."""
 
 import json
+import os
 import sqlite3
 from pathlib import Path
 
@@ -11,7 +12,9 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
-DATABASE_PATH = DATA_DIR / "skillbridge.db"
+# Normally this is the project's local database. The optional override is
+# useful for safe automated checks and does not affect regular local use.
+DATABASE_PATH = Path(os.environ.get("SKILLBRIDGE_DB_PATH", DATA_DIR / "skillbridge.db"))
 
 
 # =========================================================

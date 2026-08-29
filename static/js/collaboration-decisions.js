@@ -1,7 +1,10 @@
 (() => {
   const esc = value => String(value || "").replace(/[&<>'"]/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#039;",'"':"&quot;"}[char]));
   const request = (url, options = {}) => fetch(url, options).then(async response => {
-    const body = await response.json();
+    const raw = await response.text();
+    let body;
+    try { body = JSON.parse(raw); }
+    catch { throw new Error("The server returned an unexpected response. Please restart SkillBridge and try again."); }
     if (!response.ok) throw new Error(body.message || "Something went wrong.");
     return body;
   });
@@ -27,7 +30,7 @@
     const button = event.target.closest("[data-collaboration-decision]");
     if (!button) return;
     button.disabled = true;
-    request(`/api/collaboration-requests/${button.dataset.collaborationDecision}`, {method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify({status:button.dataset.status})}).then(() => location.reload()).catch(error => { button.disabled = false; alert(error.message); });
+    request(`/api/collaboration-requests/${button.dataset.collaborationDecision}`, {method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify({status:button.dataset.status})}).then(result => { alert(result.message); location.reload(); }).catch(error => { button.disabled = false; alert(error.message); });
   });
   document.addEventListener("DOMContentLoaded", addCollaborationDecisions);
 })();
