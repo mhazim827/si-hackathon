@@ -117,14 +117,3 @@ supabase_learning_programs_migration.sql
 supabase_announcements_migration.sql    Follow-on Supabase migrations
 docs/DEPLOYMENT.md                      Database and deployment guidance
 ```
-
-## Before pushing to GitHub
-
-- Confirm `.env` is ignored and has not been staged.
-- Do not commit Supabase URLs, passwords, SMTP credentials, or app-secret values.
-- Add a repository URL and screenshots to this README if required by the hackathon submission.
-- Run a quick smoke test: register an account, publish an opportunity, apply from a student account, change the application status, and check the email/notification flow.
-
-## License
-
-Add the license selected by your team before publishing publicly.
