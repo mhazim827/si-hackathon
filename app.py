@@ -5,10 +5,14 @@ import smtplib
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from functools import wraps
+from pathlib import Path
 from flask import Flask, jsonify, request, render_template, session, redirect, url_for
+from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
 import db as db_sqlite_backup
 from matcher import get_recommendations
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SKILLBRIDGE_SECRET_KEY", "dev-secret-key-change-me")
@@ -26,8 +30,7 @@ SKILL_CATALOG = {
 }
 
 # The demo data is intentionally labelled and domain-specific. It keeps every
-# workspace populated even before a team connects its Supabase instance or
-# creates live accounts.
+# workspace populated before people create live accounts.
 LEARNING_PROGRAMS = [
     {"id": 1, "title": "GMP & Ayurvedic Pharma Quality Essentials", "provider": "AryaVeda Pharmaceuticals", "format": "Certification", "mode": "Hybrid · New Delhi", "duration": "4 weeks", "skills": ["quality-assurance", "pharmacognosy", "medical-documentation"], "audience": "Students & recent graduates"},
     {"id": 2, "title": "Evidence-Based Panchakarma Practice", "provider": "Swasthya Research Hospital", "format": "Workshop", "mode": "On-site · Delhi", "duration": "2 days", "skills": ["panchakarma", "clinical-practice", "research-ethics"], "audience": "Students & faculty"},
@@ -189,19 +192,25 @@ def send_email(to_email, subject, body):
     smtp_email = os.environ.get("SMTP_EMAIL")
     smtp_password = os.environ.get("SMTP_PASSWORD")
     if not smtp_email or not smtp_password:
-        # SMTP isn't configured yet — print the code so local/dev testing still works.
+        # SMTP isn't configured yet — keep local testing possible, but tell
+        # callers that no message was actually delivered.
         print(f"[DEV] Email to {to_email}\nSubject: {subject}\n{body}")
-        return
-    message = MIMEText(body)
-    message["Subject"] = subject
-    message["From"] = smtp_email
-    message["To"] = to_email
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(smtp_email, smtp_password)
-        server.sendmail(smtp_email, [to_email], message.as_string())
+        return False
+    try:
+        message = MIMEText(body)
+        message["Subject"] = subject
+        message["From"] = smtp_email
+        message["To"] = to_email
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(smtp_email, smtp_password)
+            server.sendmail(smtp_email, [to_email], message.as_string())
+        return True
+    except Exception as error:
+        app.logger.error("Email delivery failed: %s", error)
+        return False
 
 def send_verification_email(to_email, code):
-    send_email(to_email, "Verify your SkillBridge email", f"Your SkillBridge verification code is: {code}\nIt expires in 10 minutes.")
+    return send_email(to_email, "Verify your SkillBridge email", f"Your SkillBridge verification code is: {code}\nIt expires in 10 minutes.")
 
 def send_programme_registration_email(to_email, student_name, program):
     publisher = program.get("provider") or "the programme publisher"
@@ -219,7 +228,7 @@ Message from the publisher:
 The publisher will share the next steps using this email address.
 
 SkillBridge"""
-    send_email(to_email, f"Registration confirmed: {program['title']}", body)
+    return send_email(to_email, f"Registration confirmed: {program['title']}", body)
 
 def send_application_status_email(to_email, student_name, opportunity_title, company, status):
     status_messages = {
@@ -237,7 +246,7 @@ Status: {status}
 {status_messages.get(status, 'Your application status has been updated.')}
 
 SkillBridge"""
-    send_email(to_email, f"Application update: {opportunity_title} — {status}", body)
+    return send_email(to_email, f"Application update: {opportunity_title} — {status}", body)
 
 def send_collaboration_accepted_email(to_email, academician_name, industry_name):
     body = f"""Hello {academician_name},
@@ -247,7 +256,7 @@ Good news — {industry_name} has accepted your SkillBridge collaboration reques
 You can now follow up with the industry partner to agree on the next steps, such as a faculty development programme, live project, research collaboration, or mentorship activity.
 
 SkillBridge"""
-    send_email(to_email, "Collaboration request accepted", body)
+    return send_email(to_email, "Collaboration request accepted", body)
 
 @app.route("/api/verify-email/request", methods=["POST"])
 @login_required
@@ -385,7 +394,7 @@ def learning_programs_api():
                 program["registered"] = program["id"] in registered_ids
     except Exception:
         conn.rollback()
-        return jsonify(status="error", message="Learning programmes need the Supabase setup query before they can be used."), 503
+        return jsonify(status="error", message="The local learning-programme data could not be loaded."), 503
     finally:
         conn.close()
     return jsonify(status="success", programs=programs)
@@ -410,7 +419,7 @@ def create_learning_program_api():
         db_sqlite_backup.create_learning_program(conn, user_id(), {"title": title, "format": format_name, "duration": duration, "skills": skills, "description": description, "mode": mode or "Online", "audience": audience or "Students", "publisher_name": account["organisation"] or account["name"]})
     except Exception:
         conn.rollback()
-        return jsonify(status="error", message="Learning programmes need the Supabase setup query before they can be published."), 503
+        return jsonify(status="error", message="The learning programme could not be saved to the local database."), 503
     finally:
         conn.close()
     return jsonify(status="success", message="Learning programme published.")
@@ -426,6 +435,7 @@ def register_learning_program_api(program_id):
             return jsonify(status="error", message="Programme or student account was not found."), 404
         if created is None:
             return jsonify(status="error", message="Add an email to your student profile before registering."), 400
+        email_delivered = False
         if created:
             publisher_id = result["program"].get("publisher_account_id")
             if publisher_id:
@@ -434,17 +444,12 @@ def register_learning_program_api(program_id):
                     (publisher_id, f"{result['student']['name']} registered for your programme: {result['program']['title']}", "/")
                 )
                 conn.commit()
-            try:
-                send_programme_registration_email(result["student"]["email"], result["student"]["name"], result["program"])
-            except Exception as error:
-                # Registration has already succeeded; keep the publisher alert
-                # and log mail delivery issues rather than losing the signup.
-                app.logger.error("Programme registration email failed: %s", error)
-        message = "You are registered. A confirmation email with the publisher’s message has been sent." if created else "You are already registered for this programme."
+            email_delivered = send_programme_registration_email(result["student"]["email"], result["student"]["name"], result["program"])
+        message = ("You are registered. A confirmation email with the publisher’s message has been sent." if email_delivered else "You are registered. Your registration was saved, but email delivery is not configured or failed.") if created else "You are already registered for this programme."
         return jsonify(status="success", message=message, registered=True)
     except Exception:
         conn.rollback()
-        return jsonify(status="error", message="Learning programmes need the Supabase setup query before registrations can be saved."), 503
+        return jsonify(status="error", message="The programme registration could not be saved to the local database."), 503
     finally:
         conn.close()
 
@@ -460,7 +465,7 @@ def announcements_api():
         return jsonify(status="success", announcements=items)
     except Exception:
         conn.rollback()
-        return jsonify(status="error", message="Announcements need the Supabase announcements setup query."), 503
+        return jsonify(status="error", message="Announcements could not be loaded from the local database."), 503
     finally:
         conn.close()
 
@@ -475,7 +480,7 @@ def publisher_announcement_targets_api():
         return jsonify(status="success", opportunities=opportunities, programs=programs)
     except Exception:
         conn.rollback()
-        return jsonify(status="error", message="Announcements need the Supabase announcements and learning-programmes setup queries."), 503
+        return jsonify(status="error", message="Publisher targets could not be loaded from the local database."), 503
     finally:
         conn.close()
 
@@ -489,7 +494,7 @@ def publisher_programme_registrations_api():
         return jsonify(status="success", registrations=registrations)
     except Exception:
         conn.rollback()
-        return jsonify(status="error", message="Learning programmes need the Supabase setup query before learner registrations can be viewed."), 503
+        return jsonify(status="error", message="Programme registrations could not be loaded from the local database."), 503
     finally:
         conn.close()
 
@@ -514,7 +519,7 @@ def create_announcement_api():
         return jsonify(status="success", message=f"Announcement sent to {recipient_count} student{'s' if recipient_count != 1 else ''}.")
     except Exception:
         conn.rollback()
-        return jsonify(status="error", message="Announcements need the Supabase announcements setup query."), 503
+        return jsonify(status="error", message="The announcement could not be saved to the local database."), 503
     finally:
         conn.close()
 
@@ -666,12 +671,13 @@ def update_collaboration_request_api(request_id):
     ).fetchone()
     updated = db_sqlite_backup.update_collaboration_request_status(conn, request_id, user_id(), status)
     conn.close()
+    email_delivered = False
     if updated and status == "Acknowledged" and request_details and request_details["academician_email"]:
-        try:
-            send_collaboration_accepted_email(request_details["academician_email"], request_details["academician_name"], request_details["industry_name"])
-        except Exception as error:
-            app.logger.error("Collaboration acceptance email failed: %s", error)
-    return jsonify(status="success", message="Updated.") if updated else (jsonify(status="error", message="Request not found."), 404)
+        email_delivered = send_collaboration_accepted_email(request_details["academician_email"], request_details["academician_name"], request_details["industry_name"])
+    if not updated:
+        return jsonify(status="error", message="Request not found."), 404
+    message = "Collaboration request accepted and the academician has been emailed." if status == "Acknowledged" and email_delivered else ("Collaboration request accepted, but email delivery is not configured or failed." if status == "Acknowledged" else "Collaboration request declined.")
+    return jsonify(status="success", message=message)
 
 @app.route("/api/applications/<int:application_id>", methods=["PATCH"])
 @login_required
@@ -696,12 +702,9 @@ def update_application(application_id):
     conn.execute("UPDATE applications SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (status, application_id))
     conn.commit()
     conn.close()
-    try:
-        if candidate["email"]:
-            send_application_status_email(candidate["email"], candidate["name"], candidate["title"], candidate["company"], status)
-    except Exception as error:
-        app.logger.error("Application status email failed: %s", error)
-    return jsonify(status="success", message="Candidate status updated and the applicant has been emailed.")
+    email_delivered = send_application_status_email(candidate["email"], candidate["name"], candidate["title"], candidate["company"], status) if candidate["email"] else False
+    message = "Candidate status updated and the applicant has been emailed." if email_delivered else "Candidate status updated, but email delivery is not configured or failed."
+    return jsonify(status="success", message=message)
 
 @app.route("/api/notifications", methods=["DELETE"])
 @login_required

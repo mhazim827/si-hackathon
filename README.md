@@ -13,8 +13,7 @@ The demo data uses domain-relevant areas such as Panchakarma, pharmacognosy, cli
 ## Technology
 
 - Python + Flask
-- Supabase PostgreSQL
-- Psycopg2
+- SQLite (a local file database)
 - Vanilla HTML, CSS, and JavaScript
 
 ## Quick start
@@ -43,12 +42,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Configure environment variables
+### 3. Optional environment variables
 
-Copy `.env.example` to `.env` and fill in your Supabase PostgreSQL connection string.
+Copy `.env.example` to `.env` if you want a custom session secret or real email delivery.
 
 ```env
-DATABASE_URL=postgresql://...
 SKILLBRIDGE_SECRET_KEY=replace-with-a-random-secret
 SMTP_EMAIL=your-sending-address@example.com
 SMTP_PASSWORD=your-app-password
@@ -56,23 +54,15 @@ SMTP_PASSWORD=your-app-password
 
 `SMTP_EMAIL` and `SMTP_PASSWORD` are optional for local UI testing. Without them, outgoing messages are printed in the server console instead of sent.
 
-### 4. Initialise Supabase
-
-Run these files in the **Supabase SQL Editor**, in order:
-
-1. `supabase_schema.sql`
-2. `supabase_learning_programs_migration.sql`
-3. `supabase_announcements_migration.sql`
-
-The migration scripts are safe to rerun after a successful run. See [deployment notes](docs/DEPLOYMENT.md) if a case-insensitive email index finds old duplicate accounts.
-
-### 5. Start the app
+### 4. Start the app
 
 ```bash
 python app.py
 ```
 
 Open [http://127.0.0.1:5000](http://127.0.0.1:5000).
+
+On its first launch, SkillBridge automatically creates `data/skillbridge.db` with the database tables and Ayush-themed demo opportunities and learning programmes. No Supabase project, SQL editor, or database configuration is required.
 
 ## Main workflows
 
@@ -107,13 +97,11 @@ The sending address and password must remain in `.env`; never commit them.
 
 ```text
 app.py                                  Flask routes and email workflows
-db.py                                   PostgreSQL access helpers and queries
+db.py                                   SQLite schema, seed data, and queries
 matcher.py                              Skill-compatibility engine
 templates/                              Flask templates
 static/css/                             Dashboard styling
 static/js/                              Role-specific dashboard interactions
-supabase_schema.sql                     Base database schema
-supabase_learning_programs_migration.sql
-supabase_announcements_migration.sql    Follow-on Supabase migrations
-docs/DEPLOYMENT.md                      Database and deployment guidance
+data/skillbridge.db                     Created locally at first run (not committed)
+docs/DEPLOYMENT.md                      Local database and email notes
 ```

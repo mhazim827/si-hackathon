@@ -1,114 +1,17 @@
-"""
-Supabase/PostgreSQL data access for the SkillBridge hackathon experience.
-"""
+"""Local SQLite data access for the SkillBridge hackathon experience."""
 
-import os
+import json
+import sqlite3
 from pathlib import Path
-
-from dotenv import load_dotenv
-import psycopg2
-from psycopg2.extras import RealDictCursor
 
 
 # =========================================================
-# Environment
+# Local database
 # =========================================================
 
 BASE_DIR = Path(__file__).resolve().parent
-load_dotenv(BASE_DIR / ".env")
-
-
-# =========================================================
-# PostgreSQL compatibility helpers
-# =========================================================
-
-class CompatRow(dict):
-    """
-    Dictionary-like database row that also supports row[0],
-    just like the old sqlite3.Row used by the original app.
-    """
-
-    def __init__(self, data):
-        super().__init__(data)
-        self._values = list(data.values())
-
-    def __getitem__(self, key):
-        if isinstance(key, int):
-            return self._values[key]
-        return super().__getitem__(key)
-
-
-class CompatCursor:
-    """
-    Wrapper so the existing Flask app can continue using
-    conn.execute(...) and SQLite-style ? placeholders.
-    """
-
-    def __init__(self, cursor):
-        self.cursor = cursor
-
-    def execute(self, query, params=None):
-        query = self._convert_query(query)
-
-        if params is None:
-            self.cursor.execute(query)
-        else:
-            self.cursor.execute(query, params)
-
-        return self
-
-    def fetchone(self):
-        row = self.cursor.fetchone()
-        return CompatRow(row) if row is not None else None
-
-    def fetchall(self):
-        return [CompatRow(row) for row in self.cursor.fetchall()]
-
-    @property
-    def rowcount(self):
-        return self.cursor.rowcount
-
-    @staticmethod
-    def _convert_query(query):
-        # SQLite ? placeholders -> PostgreSQL %s
-        query = query.replace("?", "%s")
-
-        # SQLite INSERT OR IGNORE -> PostgreSQL INSERT
-        query = query.replace(
-            "INSERT OR IGNORE INTO",
-            "INSERT INTO"
-        )
-
-        return query
-
-
-class CompatConnection:
-    """
-    Connection wrapper exposing the old conn.execute(...)
-    interface while actually using PostgreSQL/Supabase.
-    """
-
-    def __init__(self, connection):
-        self.connection = connection
-
-    def execute(self, query, params=None):
-        cursor = self.connection.cursor(
-            cursor_factory=RealDictCursor
-        )
-
-        wrapped = CompatCursor(cursor)
-        wrapped.execute(query, params)
-
-        return wrapped
-
-    def commit(self):
-        self.connection.commit()
-
-    def rollback(self):
-        self.connection.rollback()
-
-    def close(self):
-        self.connection.close()
+DATA_DIR = BASE_DIR / "data"
+DATABASE_PATH = DATA_DIR / "skillbridge.db"
 
 
 # =========================================================
@@ -116,16 +19,11 @@ class CompatConnection:
 # =========================================================
 
 def get_connection():
-    database_url = os.getenv("DATABASE_URL")
-
-    if not database_url:
-        raise RuntimeError(
-            "DATABASE_URL was not found in the .env file."
-        )
-
-    connection = psycopg2.connect(database_url)
-
-    return CompatConnection(connection)
+    DATA_DIR.mkdir(exist_ok=True)
+    connection = sqlite3.connect(DATABASE_PATH)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
+    return connection
 
 
 # =========================================================
@@ -133,36 +31,71 @@ def get_connection():
 # =========================================================
 
 def init_db():
-    """
-    Initialise the Supabase database.
-
-    Tables must already exist because they are created using
-    supabase_schema.sql in Supabase SQL Editor.
-
-    If opportunities is empty, insert the built-in opportunities.
-    """
-
     conn = get_connection()
-
     try:
-        result = conn.execute(
-            "SELECT COUNT(*) AS count FROM opportunities"
-        )
-
-        count = result.fetchone()["count"]
-
-        # Seeding is idempotent, so a new domain-relevant demo catalogue can
-        # safely be added to an existing development database as well.
+        _create_schema(conn)
+        _normalise_existing_skills(conn)
         _seed_data(conn)
-
+        _seed_learning_programs(conn)
         conn.commit()
-
     except Exception:
         conn.rollback()
         raise
-
     finally:
         conn.close()
+
+
+def _create_schema(conn):
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS students (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            email TEXT NOT NULL DEFAULT '',
+            headline TEXT DEFAULT 'Emerging professional building industry-ready skills.',
+            bio TEXT DEFAULT '',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            role TEXT NOT NULL CHECK(role IN ('industry', 'academician')),
+            name TEXT NOT NULL,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            organisation TEXT DEFAULT '',
+            email TEXT NOT NULL DEFAULT '',
+            verified INTEGER DEFAULT 0,
+            verification_code TEXT,
+            verification_expires TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_students_email_lower ON students(lower(email)) WHERE email <> '';
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_email_lower ON accounts(lower(email)) WHERE email <> '';
+        CREATE TABLE IF NOT EXISTS skills (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, category TEXT DEFAULT 'General');
+        CREATE TABLE IF NOT EXISTS student_skills (student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE, skill_id INTEGER NOT NULL REFERENCES skills(id) ON DELETE CASCADE, PRIMARY KEY(student_id, skill_id));
+        CREATE TABLE IF NOT EXISTS student_skill_levels (student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE, skill_id INTEGER NOT NULL REFERENCES skills(id) ON DELETE CASCADE, level TEXT NOT NULL CHECK(level IN ('Beginner','Intermediate','Expert')), score INTEGER DEFAULT 0, PRIMARY KEY(student_id, skill_id));
+        CREATE TABLE IF NOT EXISTS opportunities (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, company TEXT DEFAULT 'N/A', type TEXT DEFAULT 'Internship', description TEXT DEFAULT '', location TEXT DEFAULT 'Remote / Hybrid', duration TEXT DEFAULT 'Flexible', posted_by_account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS opportunity_skills (opportunity_id INTEGER NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE, skill_id INTEGER NOT NULL REFERENCES skills(id) ON DELETE CASCADE, weight_type TEXT NOT NULL CHECK(weight_type IN ('required','preferred')), PRIMARY KEY(opportunity_id, skill_id, weight_type));
+        CREATE TABLE IF NOT EXISTS applications (id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE, opportunity_id INTEGER NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'Submitted' CHECK(status IN ('Submitted','Under Review','Shortlisted','Interview','Selected','Not Selected')), applied_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(student_id, opportunity_id));
+        CREATE TABLE IF NOT EXISTS portfolio_items (id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE, item_type TEXT NOT NULL CHECK(item_type IN ('Project','Certification','Achievement','Internship')), title TEXT NOT NULL, issuer TEXT DEFAULT '', link TEXT DEFAULT '', description TEXT DEFAULT '', verified INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, message TEXT NOT NULL, link TEXT DEFAULT '', is_read INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS collaboration_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, academician_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, industry_account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, opportunity_id INTEGER REFERENCES opportunities(id) ON DELETE SET NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'Sent' CHECK(status IN ('Sent','Acknowledged','Declined')), created_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(academician_id, industry_account_id));
+        CREATE TABLE IF NOT EXISTS learning_programs (id INTEGER PRIMARY KEY AUTOINCREMENT, publisher_account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL, publisher_name TEXT NOT NULL, title TEXT NOT NULL, format TEXT NOT NULL CHECK(format IN ('Certification','Workshop','Mentorship')), mode TEXT NOT NULL DEFAULT 'Online', duration TEXT NOT NULL, skills TEXT NOT NULL DEFAULT '[]', audience TEXT NOT NULL DEFAULT 'Students', description TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(publisher_name, title));
+        CREATE TABLE IF NOT EXISTS programme_registrations (id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE, learning_program_id INTEGER NOT NULL REFERENCES learning_programs(id) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'Registered' CHECK(status IN ('Registered','Cancelled','Completed')), registered_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(student_id, learning_program_id));
+        CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, publisher_account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, opportunity_id INTEGER REFERENCES opportunities(id) ON DELETE CASCADE, learning_program_id INTEGER REFERENCES learning_programs(id) ON DELETE CASCADE, subject TEXT NOT NULL, message TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP, CHECK((opportunity_id IS NOT NULL AND learning_program_id IS NULL) OR (opportunity_id IS NULL AND learning_program_id IS NOT NULL)));
+        CREATE TABLE IF NOT EXISTS announcement_recipients (announcement_id INTEGER NOT NULL REFERENCES announcements(id) ON DELETE CASCADE, student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE, is_read INTEGER DEFAULT 0, PRIMARY KEY(announcement_id, student_id));
+    """)
+
+
+def _seed_learning_programs(conn):
+    programs = [
+        ("AryaVeda Pharmaceuticals", "GMP & Ayurvedic Pharma Quality Essentials", "Certification", "Hybrid · New Delhi", "4 weeks", ["quality-assurance", "pharmacognosy", "medical-documentation"], "Students & recent graduates", "Learn GMP fundamentals for Ayurvedic formulations, including batch records and quality documentation."),
+        ("Swasthya Research Hospital", "Evidence-Based Panchakarma Practice", "Workshop", "On-site · Delhi", "2 days", ["panchakarma", "clinical-practice", "research-ethics"], "Students & faculty", "Join clinical mentors for a practical Panchakarma workshop focused on patient safety, documentation, and evidence-led care."),
+        ("Prana Integrative Care", "Yoga Therapy Case Documentation", "Mentorship", "Online", "6 weeks", ["yoga-therapy", "medical-documentation", "patient-counselling"], "Students", "Build a supervised case-documentation portfolio for yoga therapy.")
+    ]
+    for program in programs:
+        conn.execute("""INSERT OR IGNORE INTO learning_programs(publisher_name,title,format,mode,duration,skills,audience,description) VALUES(?,?,?,?,?,?,?,?)""", (*program[:5], json.dumps(program[5]), *program[6:]))
 
 
 # =========================================================
@@ -1187,7 +1120,7 @@ def set_verification_code(conn, account_id, code, expires_at):
             verification_expires = ?
         WHERE id = ?
         """,
-        (code, expires_at, account_id)
+        (code, expires_at.isoformat(), account_id)
     )
 
     conn.commit()
@@ -1195,7 +1128,7 @@ def set_verification_code(conn, account_id, code, expires_at):
 
 def get_verification(conn, account_id):
 
-    return conn.execute(
+    row = conn.execute(
         """
         SELECT verification_code, verification_expires
         FROM accounts
@@ -1203,6 +1136,13 @@ def get_verification(conn, account_id):
         """,
         (account_id,)
     ).fetchone()
+    if row is None:
+        return None
+    result = dict(row)
+    if result["verification_expires"]:
+        from datetime import datetime
+        result["verification_expires"] = datetime.fromisoformat(result["verification_expires"])
+    return result
 
 
 def clear_verification_code(conn, account_id):
@@ -1230,7 +1170,7 @@ def delete_opportunity(conn, opportunity_id, account_id):
     Deletes an opportunity only if it belongs to the requesting
     industry account. Returns the number of rows deleted (0 or 1).
     opportunity_skills and applications cascade-delete via the
-    foreign keys defined in supabase_schema.sql.
+    foreign keys defined in the local schema.
     """
 
     result = conn.execute(
@@ -1393,7 +1333,7 @@ def update_collaboration_request_status(conn, request_id, industry_account_id, s
 # =========================================================
 
 def learning_programs(conn):
-    return [
+    programs = [
         dict(row)
         for row in conn.execute(
             """
@@ -1403,6 +1343,9 @@ def learning_programs(conn):
             ORDER BY lp.created_at DESC, lp.id DESC
             """
         ).fetchall()]
+    for program in programs:
+        program["skills"] = json.loads(program["skills"] or "[]")
+    return programs
 
 
 def create_learning_program(conn, account_id, data):
@@ -1416,9 +1359,12 @@ def create_learning_program(conn, account_id, data):
         """,
         (
             account_id, data["publisher_name"], data["title"], data["format"], data.get("mode", "Online"),
-            data["duration"], data["skills"], data.get("audience", "Students"), data["description"]
+            data["duration"], json.dumps(data["skills"]), data.get("audience", "Students"), data["description"]
         )
     )
+    ident = result.fetchone()["id"]
+    conn.commit()
+    return ident
 
 
 def email_taken(conn, email):
@@ -1430,9 +1376,6 @@ def email_taken(conn, email):
         LIMIT 1
         """, (email, email)
     ).fetchone())
-    ident = result.fetchone()["id"]
-    conn.commit()
-    return ident
 
 
 def register_for_learning_program(conn, student_id, program_id):
@@ -1495,7 +1438,7 @@ def programme_registrations_for_publisher(conn, publisher_id):
 
 
 def registered_learning_programs_for_student(conn, student_id):
-    return [dict(row) for row in conn.execute(
+    programs = [dict(row) for row in conn.execute(
         """
         SELECT lp.*, COALESCE(a.organisation, a.name, lp.publisher_name) AS provider,
                pr.status, pr.registered_at
@@ -1505,6 +1448,9 @@ def registered_learning_programs_for_student(conn, student_id):
         WHERE pr.student_id = ?
         ORDER BY pr.registered_at DESC
         """, (student_id,)).fetchall()]
+    for program in programs:
+        program["skills"] = json.loads(program["skills"] or "[]")
+    return programs
 
 
 # =========================================================

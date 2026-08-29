@@ -1,43 +1,35 @@
-# Deployment and database notes
+# Local setup notes
 
-## Supabase setup
+SkillBridge uses SQLite by default. Its complete database is a single local
+file at `data/skillbridge.db`, created automatically when `python app.py` is
+started for the first time. No cloud database account or SQL migration is
+needed.
 
-Create a Supabase project and copy its PostgreSQL connection string into `DATABASE_URL` in your local `.env` file. Run the SQL files in this order:
+## Keeping or resetting data
 
-1. `supabase_schema.sql`
-2. `supabase_learning_programs_migration.sql`
-3. `supabase_announcements_migration.sql`
-
-Run them using Supabase Dashboard → SQL Editor. Do not paste credentials into source files or commit `.env`.
-
-## Duplicate email migration error
-
-The learning-programme migration creates a case-insensitive unique index for account email addresses. If an older database contains duplicate emails, find them with:
-
-```sql
-select lower(email) as email, array_agg(id) as account_ids
-from public.accounts
-where email is not null and email <> ''
-group by lower(email)
-having count(*) > 1;
-```
-
-Choose which account should retain the address, change the other account to its real unique email, then rerun the migration:
-
-```sql
-update public.accounts
-set email = 'different-email@example.com'
-where id = REPLACE_WITH_THE_DUPLICATE_ACCOUNT_ID;
-```
+All accounts, applications, programme registrations, announcements, and
+collaboration requests are kept in `data/skillbridge.db` on this computer.
+Keep that file to retain the demo data you create. To return to a fresh
+Ayush-themed demo, stop the app and delete that file; the next launch creates
+it again.
 
 ## Email delivery
 
-The app sends email through Gmail SMTP over SSL. Use an app password rather than a normal Gmail password. Set `SMTP_EMAIL` and `SMTP_PASSWORD` in `.env`; omit either one to keep email output local to the server console.
+Email is optional. To send real messages through Gmail SMTP, add these values
+to a local `.env` file:
 
-## Production checklist
+```env
+SMTP_EMAIL=your-sending-address@example.com
+SMTP_PASSWORD=your-gmail-app-password
+```
 
-- Set a strong, unique `SKILLBRIDGE_SECRET_KEY`.
-- Use a production WSGI server and HTTPS rather than Flask’s built-in server.
-- Restrict Supabase database access to trusted application credentials.
-- Back up database data and monitor SMTP delivery failures.
-- Add a privacy notice and a data-retention policy before handling real student records.
+Without both values, registrations, candidate updates, collaboration updates,
+and announcements still work in the app. Their email content is printed in the
+server console instead of being sent.
+
+## Sharing the demo
+
+For a local hackathon demonstration, run `python app.py` and open
+`http://127.0.0.1:5000` in the browser on that computer. SQLite is ideal for
+this single-computer setup. A hosted, multi-user version would need a managed
+database and a production web server.
